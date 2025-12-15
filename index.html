@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gemini Transcription Viewer</title>
+    <title>Archivist Transcription Viewer</title>
     <style>
         :root {
             --primary: #2563eb;
@@ -56,6 +56,8 @@
         button:hover { background: #f8fafc; border-color: #94a3b8; }
         button.primary { background: var(--primary); color: white; border: none; }
         button.primary:hover { background: #1d4ed8; }
+        button.secondary { color: #475569; border: 1px dashed #cbd5e1; }
+        button.secondary:hover { border-color: var(--primary); color: var(--primary); }
 
         /* --- Layout --- */
         main { display: flex; flex: 1; overflow: hidden; position: relative; }
@@ -163,140 +165,84 @@
             pointer-events: none;
         }
 
-/* 1. Shelf Mark: Boxed, often looks like a label/sticker */
+        /* Custom Region Styles */
         .region-shelf_mark {
-            background: #e0f2fe; /* Light blue */
-            border: 2px solid #0ea5e9;
-            border-radius: 4px;
-            padding: 0.5rem 1rem;
-            display: inline-block; /* Don't take full width if not needed */
-            font-family: monospace;
-            font-weight: bold;
-            color: #0369a1;
+            background: #e0f2fe; border: 2px solid #0ea5e9;
+            border-radius: 4px; padding: 0.5rem 1rem;
+            display: inline-block; font-family: monospace;
+            font-weight: bold; color: #0369a1;
         }
 
-        /* 2. Bookplate: Serif font, paper-like background */
         .region-bookplate {
-            background: #fef3c7; /* Amber/Paper color */
-            border: 4px double #d97706; /* Double border for "fancy" look */
-            padding: 1.5rem;
-            margin: 1rem 0;
-            text-align: center;
+            background: #fef3c7; border: 4px double #d97706;
+            padding: 1.5rem; margin: 1rem 0; text-align: center;
             font-family: "Times New Roman", serif;
         }
-        /* Add a little header for the bookplate */
         .region-bookplate::before {
-            content: "EX LIBRIS / PROVENANCE";
-            display: block;
-            font-size: 0.7rem;
-            letter-spacing: 2px;
-            color: #d97706;
-            margin-bottom: 0.5rem;
-            border-bottom: 1px solid rgba(217, 119, 6, 0.3);
+            content: "EX LIBRIS / PROVENANCE"; display: block;
+            font-size: 0.7rem; letter-spacing: 2px; color: #d97706;
+            margin-bottom: 0.5rem; border-bottom: 1px solid rgba(217, 119, 6, 0.3);
         }
 
-        /* 3. Seal: Rounded look to mimic ink stamps */
         .region-seal {
-            border: 2px dashed #be123c; /* Red/Pink ink color */
-            border-radius: 12px;
-            padding: 1rem;
-            color: #be123c;
-            background: rgba(190, 18, 60, 0.05);
-            transform: rotate(-1deg); /* Slight skew for realism */
+            border: 2px dashed #be123c; border-radius: 12px;
+            padding: 1rem; color: #be123c; background: rgba(190, 18, 60, 0.05);
+            transform: rotate(-1deg);
         }
 
-        /* 4. Page Number: Small, usually aligned differently */
         .region-page_number {
-            text-align: right;
-            font-size: 0.9rem;
-            color: #64748b;
-            border-bottom: 1px solid #e2e8f0;
-            padding-bottom: 0.25rem;
-            margin-bottom: 1rem;
-            font-variant-numeric: oldstyle-nums;
+            text-align: right; font-size: 0.9rem; color: #64748b;
+            border-bottom: 1px solid #e2e8f0; padding-bottom: 0.25rem;
+            margin-bottom: 1rem; font-variant-numeric: oldstyle-nums;
         }
 
-        /* 5. Marginalia: Italicized notes */
         .region-marginalia {
-            font-style: italic;
-            border-left: 3px solid #8b5cf6; /* Purple accent */
-            padding-left: 1rem;
-            color: #5b21b6;
-            background: #f5f3ff;
+            font-style: italic; border-left: 3px solid #8b5cf6;
+            padding-left: 1rem; color: #5b21b6; background: #f5f3ff;
         }
 
         .line {
-            margin-bottom: 0.2rem; 
-            line-height: 1.8;
-            color: var(--color-base);
+            margin-bottom: 0.2rem; line-height: 1.8; color: var(--color-base);
         }
 
         /* Segment Styling */
         .seg {
-            cursor: pointer;
-            padding: 0.1rem 0.2rem;
-            border-radius: 3px;
-            transition: background 0.1s;
-            display: inline-block; /* Allows transforms/borders to work better */
+            cursor: pointer; padding: 0.1rem 0.2rem; border-radius: 3px;
+            transition: background 0.1s; display: inline-block;
         }
         .seg:hover, .seg.active { background-color: #fef08a; }
 
-        /* Types */
         .seg-deletion { 
-            text-decoration: line-through; 
-            text-decoration-color: var(--color-del);
-            text-decoration-thickness: 2px;
-            color: #64748b;
+            text-decoration: line-through; text-decoration-color: var(--color-del);
+            text-decoration-thickness: 2px; color: #64748b;
         }
         .seg-insertion {
-            vertical-align: super;
-            font-size: 0.85em;
-            color: var(--color-ins);
-            font-weight: 600;
+            vertical-align: super; font-size: 0.85em;
+            color: var(--color-ins); font-weight: 600;
         }
         .seg-substitution {
-            text-decoration: underline;
-            text-decoration-color: var(--color-sub);
-            text-decoration-style: wavy;
-            color: #b45309;
+            text-decoration: underline; text-decoration-color: var(--color-sub);
+            text-decoration-style: wavy; color: #b45309;
         }
         .seg-handwritten_note {
             font-family: "Comic Sans MS", "Chalkboard SE", sans-serif;
-            font-style: italic;
-            color: var(--color-note);
-            background: #f3e8ff;
+            font-style: italic; color: var(--color-note); background: #f3e8ff;
         }
 
-        /* STYLES (New Feature) */
-        .style-underlined {
-            border-bottom: 2px solid var(--color-base);
+        /* Styles */
+        .style-underlined { border-bottom: 2px solid var(--color-base); }
+        .style-circled { border: 2px solid var(--color-base); border-radius: 50%; padding: 2px 8px; }
+        .seg-deletion.style-circled, .seg-deletion.style-boxed {
+            border-color: var(--color-del); color: var(--color-del); opacity: 0.8;
         }
-        .style-circled {
-            border: 2px solid var(--color-base);
-            border-radius: 50%;
-            padding: 2px 8px;
-        }
-        /* If something is BOTH deleted AND circled/boxed, make the border match the deletion color */
-        .seg-deletion.style-circled,
-        .seg-deletion.style-boxed {
-            border-color: var(--color-del); /* Make the circle/box red/grey */
-            color: var(--color-del);        /* Ensure text is deleted color */
-            opacity: 0.8;
-        }
-        .style-boxed {
-            border: 2px solid var(--color-base);
-            padding: 2px 4px;
-        }
-
-        /* Conflict Resolution: If deleted AND underlined, ensure strike goes through */
+        .style-boxed { border: 2px solid var(--color-base); padding: 2px 4px; }
         .seg-deletion.style-underlined {
-            text-decoration: line-through;
-            border-bottom: 2px solid var(--color-del); /* underline becomes delete color */
+            text-decoration: line-through; border-bottom: 2px solid var(--color-del);
         }
 
         #error-msg { 
             display: none; background: #fee2e2; color: #991b1b; 
-            padding: 1rem; border-radius: 6px; font-size: 0.9rem; 
+            padding: 1rem; border-radius: 6px; font-size: 0.9rem; margin-bottom: 10px;
         }
 
     </style>
@@ -315,15 +261,20 @@
             <textarea id="json-data" spellcheck="false"></textarea>
         </div>
         <div id="error-msg"></div>
-        <div style="display:flex; justify-content: flex-end; gap: 10px;">
-            <button onclick="loadExample()">Load Example Data</button>
-            <button class="primary" onclick="launchViewer()">Render Visualization</button>
+        <div style="display:flex; justify-content: space-between; align-items: center;">
+            <div style="display:flex; gap: 10px;">
+                <button class="secondary" onclick="copyShareLink()">🔗 Copy Shareable URL</button>
+            </div>
+            <div style="display:flex; gap: 10px;">
+                <button onclick="loadExample()">Load Example Data</button>
+                <button class="primary" onclick="launchViewer()">Render Visualization</button>
+            </div>
         </div>
     </div>
 </div>
 
 <header>
-    <h1>Gemini Transcription Viewer</h1>
+    <h1>Archivist Transcription Viewer</h1>
     <div class="controls">
         <button onclick="document.getElementById('setup-view').style.display='flex'">Load Data</button>
     </div>
@@ -341,8 +292,6 @@
 </main>
 
 <script>
-    // --- Configuration ---
-    // Hardcoded 1000x1000 normalization
     const REF_SCALE = 1000;
 
     // --- Example Data ---
@@ -678,6 +627,35 @@
         }
     }
 
+    // --- Share Logic ---
+    function copyShareLink() {
+        const url = document.getElementById('img-url').value.trim();
+        const jsonStr = document.getElementById('json-data').value.trim();
+        const errMsg = document.getElementById('error-msg');
+
+        if(!url || !jsonStr) {
+            errMsg.textContent = "Cannot share: Missing URL or JSON data";
+            errMsg.style.display = 'block';
+            return;
+        }
+
+        try {
+            // Encode JSON to Base64 (Handling Unicode characters)
+            const base64Data = btoa(unescape(encodeURIComponent(jsonStr)));
+            
+            // Construct URL
+            const baseUrl = window.location.protocol + '//' + window.location.host + window.location.pathname;
+            const finalUrl = `${baseUrl}?img=${encodeURIComponent(url)}&base64=${base64Data}`;
+
+            navigator.clipboard.writeText(finalUrl).then(() => {
+                alert("Shareable URL copied to clipboard!");
+            });
+        } catch (e) {
+            errMsg.textContent = "Error creating share link: " + e.message;
+            errMsg.style.display = 'block';
+        }
+    }
+
     // --- Build Logic ---
     function buildUI(regions) {
         const overlay = document.getElementById('overlay-layer');
@@ -725,16 +703,12 @@
                             sBox.onmouseenter = () => activate(uniqueId);
                             sBox.onmouseleave = () => deactivate(uniqueId);
                             
-                            // NEW: Click to scroll to Text
+                            // Click to scroll
                             sBox.onclick = (e) => {
-                                e.stopPropagation(); // Prevent clicking through to parent layers
+                                e.stopPropagation();
                                 const targetSpan = document.getElementById(`span-${uniqueId}`);
                                 if(targetSpan) {
-                                    targetSpan.scrollIntoView({ 
-                                        behavior: 'smooth', 
-                                        block: 'center' 
-                                    });
-                                    // Optional: momentary flash could be added here
+                                    targetSpan.scrollIntoView({ behavior: 'smooth', block: 'center' });
                                 }
                             };
 
@@ -743,30 +717,21 @@
                             // --- B. Span in Text ---
                             const sSpan = document.createElement('span');
                             
-                            // Combine Type and Style classes
                             let classes = `seg seg-${seg.type}`;
-                            if (seg.style && seg.style !== 'none') {
-                                classes += ` style-${seg.style}`;
-                            }
+                            if (seg.style && seg.style !== 'none') classes += ` style-${seg.style}`;
                             
                             sSpan.className = classes;
                             sSpan.id = `span-${uniqueId}`;
                             sSpan.textContent = seg.text + " "; 
                             
-                            // Hover Effects
                             sSpan.onmouseenter = () => activate(uniqueId);
                             sSpan.onmouseleave = () => deactivate(uniqueId);
 
-                            // NEW: Click to scroll to Image Box
                             sSpan.onclick = (e) => {
                                 e.stopPropagation();
                                 const targetBox = document.getElementById(`box-${uniqueId}`);
                                 if(targetBox) {
-                                    targetBox.scrollIntoView({ 
-                                        behavior: 'smooth', 
-                                        block: 'center',
-                                        inline: 'center' // Helps if image is zoomed/horizontally scrolled
-                                    });
+                                    targetBox.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
                                 }
                             };
 
@@ -781,7 +746,6 @@
     }
 
     function createBox(coords, className) {
-        // Coords are [y1, x1, y2, x2] normalized to 1000
         const [y1, x1, y2, x2] = coords;
         const div = document.createElement('div');
         div.className = `bbox ${className}`;
@@ -799,7 +763,6 @@
         return div;
     }
 
-    // --- Interaction ---
     function activate(uid) {
         const box = document.getElementById(`box-${uid}`);
         const span = document.getElementById(`span-${uid}`);
@@ -818,31 +781,43 @@
     window.addEventListener('DOMContentLoaded', () => {
         const params = new URLSearchParams(window.location.search);
         const imgUrl = params.get('img');
+        const base64Data = params.get('base64');
         const dataUrl = params.get('data') || params.get('gist'); // accept 'data' or 'gist'
 
-        if (imgUrl && dataUrl) {
-            // 1. Populate the Image URL input
+        if (imgUrl) {
             document.getElementById('img-url').value = imgUrl;
 
-            // 2. Fetch the JSON data
-            fetch(dataUrl)
-                .then(response => {
-                    if (!response.ok) throw new Error("Failed to fetch JSON data from URL");
-                    return response.text(); // Get as text to populate textarea
-                })
-                .then(text => {
-                    // 3. Populate JSON textarea
-                    document.getElementById('json-data').value = text;
-                    
-                    // 4. Trigger the existing launch logic
+            // Priority 1: Check for Base64 encoded JSON directly in URL
+            if (base64Data) {
+                try {
+                    // Decode (Handling Unicode)
+                    const jsonStr = decodeURIComponent(escape(atob(base64Data)));
+                    document.getElementById('json-data').value = jsonStr;
                     launchViewer();
-                })
-                .catch(err => {
-                    console.error("Auto-load error:", err);
+                } catch (e) {
+                    console.error("Base64 decode error", e);
                     const errDiv = document.getElementById('error-msg');
-                    errDiv.textContent = "Error loading URL parameters: " + err.message;
+                    errDiv.textContent = "Error decoding Base64 data: " + e.message;
                     errDiv.style.display = 'block';
-                });
+                }
+            } 
+            // Priority 2: Check for external data URL
+            else if (dataUrl) {
+                fetch(dataUrl)
+                    .then(response => {
+                        if (!response.ok) throw new Error("Failed to fetch JSON data from URL");
+                        return response.text();
+                    })
+                    .then(text => {
+                        document.getElementById('json-data').value = text;
+                        launchViewer();
+                    })
+                    .catch(err => {
+                        const errDiv = document.getElementById('error-msg');
+                        errDiv.textContent = "Error loading URL parameters: " + err.message;
+                        errDiv.style.display = 'block';
+                    });
+            }
         }
     });
 
