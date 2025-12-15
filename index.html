@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Archivist Transcription Viewer</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --bg-canvas: #e2e8f0;
+            
+            /* Segment Colors */
+            --color-base: #1e293b;
+            --color-del: #ef4444;
+            --color-ins: #2563eb;
+            --color-sub: #f59e0b;
+            --color-note: #8b5cf6;
+
+            /* Box Styles */
+            --box-region-border: rgba(37, 99, 235, 0.2);
+            --box-segment-active: rgba(255, 230, 0, 0.25);
+            --box-segment-border-active: #facc15;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background-color: #f1f5f9;
+            overflow: hidden;
+        }
+
+        /* --- Header --- */
+        header {
+            background: white;
+            padding: 0.75rem 1.5rem;
+            border-bottom: 1px solid #cbd5e1;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: 50px;
+            flex-shrink: 0;
+            z-index: 20;
+        }
+        h1 { margin: 0; font-size: 1rem; color: #334155; font-weight: 700; letter-spacing: -0.01em; }
+        .controls { display: flex; gap: 10px; }
+        button {
+            padding: 0.4rem 0.8rem; border-radius: 4px; border: 1px solid #cbd5e1;
+            background: white; cursor: pointer; font-size: 0.8rem; font-weight: 600;
+            transition: all 0.1s;
+        }
+        button:hover { background: #f8fafc; border-color: #94a3b8; }
+        button.primary { background: var(--primary); color: white; border: none; }
+        button.primary:hover { background: #1d4ed8; }
+
+        /* --- Layout --- */
+        main { display: flex; flex: 1; overflow: hidden; position: relative; }
+
+        /* --- Setup Overlay --- */
+        #setup-view {
+            position: absolute; inset: 0; background: #f8fafc; z-index: 50;
+            padding: 2rem; display: flex; justify-content: center; overflow-y: auto;
+        }
+        .setup-card {
+            background: white; padding: 2rem; border-radius: 8px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); width: 100%; max-width: 900px;
+            display: flex; flex-direction: column; gap: 1.25rem; height: fit-content;
+        }
+        .input-group { display: flex; flex-direction: column; gap: 0.5rem; flex: 1; }
+        label { font-weight: 600; color: #64748b; font-size: 0.75rem; text-transform: uppercase; }
+        input, textarea {
+            padding: 0.75rem; border: 1px solid #cbd5e1; border-radius: 6px;
+            font-family: monospace; font-size: 12px;
+        }
+        textarea { min-height: 300px; resize: vertical; }
+
+        /* --- Image Pane --- */
+        .image-pane {
+            flex: 2;
+            background: var(--bg-canvas);
+            padding: 2rem;
+            overflow: auto;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+        }
+        .canvas-wrapper {
+            position: relative;
+            background: white;
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
+            line-height: 0;
+        }
+        #target-image { max-width: 100%; display: block; }
+        .overlay-layer { position: absolute; inset: 0; pointer-events: none; }
+
+        /* Bounding Boxes */
+        .bbox { position: absolute; pointer-events: auto; transition: 0.1s; }
+        
+        .bbox-region { 
+            border: 1px dashed var(--box-region-border); 
+            pointer-events: none; 
+        }
+        .bbox-region::after {
+            content: attr(data-label);
+            position: absolute; top: -14px; left: 0;
+            font-size: 9px; color: var(--primary); font-weight: bold; text-transform: uppercase;
+        }
+
+        .bbox-segment {
+            cursor: pointer;
+            border: 1px solid transparent;
+        }
+        .bbox-segment:hover, .bbox-segment.active {
+            background-color: var(--box-segment-active);
+            border-color: var(--box-segment-border-active);
+            z-index: 100;
+        }
+
+        /* --- Text Pane --- */
+        .text-pane {
+            flex: 1;
+            min-width: 400px;
+            max-width: 600px;
+            background: white;
+            border-left: 1px solid #cbd5e1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            padding: 2rem;
+        }
+
+        /* Semantic Region Styling */
+        .region { margin-bottom: 2rem; position: relative; }
+        .region-label {
+            position: absolute; left: -1.5rem; top: 0;
+            font-size: 0.65rem; color: #94a3b8; font-weight: 700;
+            writing-mode: vertical-rl; transform: rotate(180deg);
+            text-transform: uppercase;
+        }
+        
+        /* Deleted Block Region */
+        .region-deleted_block {
+            opacity: 0.6;
+            background: #f1f5f9;
+            padding: 1rem;
+            border-radius: 6px;
+            border: 1px solid #e2e8f0;
+            position: relative;
+        }
+        .region-deleted_block::after {
+            content: ""; position: absolute; inset: 0;
+            background: repeating-linear-gradient(
+                45deg,
+                transparent,
+                transparent 10px,
+                rgba(239, 68, 68, 0.05) 10px,
+                rgba(239, 68, 68, 0.05) 20px
+            );
+            pointer-events: none;
+        }
+
+/* 1. Shelf Mark: Boxed, often looks like a label/sticker */
+        .region-shelf_mark {
+            background: #e0f2fe; /* Light blue */
+            border: 2px solid #0ea5e9;
+            border-radius: 4px;
+            padding: 0.5rem 1rem;
+            display: inline-block; /* Don't take full width if not needed */
+            font-family: monospace;
+            font-weight: bold;
+            color: #0369a1;
+        }
+
+        /* 2. Bookplate: Serif font, paper-like background */
+        .region-bookplate {
+            background: #fef3c7; /* Amber/Paper color */
+            border: 4px double #d97706; /* Double border for "fancy" look */
+            padding: 1.5rem;
+            margin: 1rem 0;
+            text-align: center;
+            font-family: "Times New Roman", serif;
+        }
+        /* Add a little header for the bookplate */
+        .region-bookplate::before {
+            content: "EX LIBRIS / PROVENANCE";
+            display: block;
+            font-size: 0.7rem;
+            letter-spacing: 2px;
+            color: #d97706;
+            margin-bottom: 0.5rem;
+            border-bottom: 1px solid rgba(217, 119, 6, 0.3);
+        }
+
+        /* 3. Seal: Rounded look to mimic ink stamps */
+        .region-seal {
+            border: 2px dashed #be123c; /* Red/Pink ink color */
+            border-radius: 12px;
+            padding: 1rem;
+            color: #be123c;
+            background: rgba(190, 18, 60, 0.05);
+            transform: rotate(-1deg); /* Slight skew for realism */
+        }
+
+        /* 4. Page Number: Small, usually aligned differently */
+        .region-page_number {
+            text-align: right;
+            font-size: 0.9rem;
+            color: #64748b;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 0.25rem;
+            margin-bottom: 1rem;
+            font-variant-numeric: oldstyle-nums;
+        }
+
+        /* 5. Marginalia: Italicized notes */
+        .region-marginalia {
+            font-style: italic;
+            border-left: 3px solid #8b5cf6; /* Purple accent */
+            padding-left: 1rem;
+            color: #5b21b6;
+            background: #f5f3ff;
+        }
+
+        .line {
+            margin-bottom: 0.2rem; 
+            line-height: 1.8;
+            color: var(--color-base);
+        }
+
+        /* Segment Styling */
+        .seg {
+            cursor: pointer;
+            padding: 0.1rem 0.2rem;
+            border-radius: 3px;
+            transition: background 0.1s;
+            display: inline-block; /* Allows transforms/borders to work better */
+        }
+        .seg:hover, .seg.active { background-color: #fef08a; }
+
+        /* Types */
+        .seg-deletion { 
+            text-decoration: line-through; 
+            text-decoration-color: var(--color-del);
+            text-decoration-thickness: 2px;
+            color: #64748b;
+        }
+        .seg-insertion {
+            vertical-align: super;
+            font-size: 0.85em;
+            color: var(--color-ins);
+            font-weight: 600;
+        }
+        .seg-substitution {
+            text-decoration: underline;
+            text-decoration-color: var(--color-sub);
+            text-decoration-style: wavy;
+            color: #b45309;
+        }
+        .seg-handwritten_note {
+            font-family: "Comic Sans MS", "Chalkboard SE", sans-serif;
+            font-style: italic;
+            color: var(--color-note);
+            background: #f3e8ff;
+        }
+
+        /* STYLES (New Feature) */
+        .style-underlined {
+            border-bottom: 2px solid var(--color-base);
+        }
+        .style-circled {
+            border: 2px solid var(--color-base);
+            border-radius: 50%;
+            padding: 2px 8px;
+        }
+        /* If something is BOTH deleted AND circled/boxed, make the border match the deletion color */
+        .seg-deletion.style-circled,
+        .seg-deletion.style-boxed {
+            border-color: var(--color-del); /* Make the circle/box red/grey */
+            color: var(--color-del);        /* Ensure text is deleted color */
+            opacity: 0.8;
+        }
+        .style-boxed {
+            border: 2px solid var(--color-base);
+            padding: 2px 4px;
+        }
+
+        /* Conflict Resolution: If deleted AND underlined, ensure strike goes through */
+        .seg-deletion.style-underlined {
+            text-decoration: line-through;
+            border-bottom: 2px solid var(--color-del); /* underline becomes delete color */
+        }
+
+        #error-msg { 
+            display: none; background: #fee2e2; color: #991b1b; 
+            padding: 1rem; border-radius: 6px; font-size: 0.9rem; 
+        }
+
+    </style>
+</head>
+<body>
+
+<div id="setup-view">
+    <div class="setup-card">
+        <h2>Data Configuration</h2>
+        <div class="input-group">
+            <label>Image URL</label>
+            <input type="text" id="img-url" placeholder="https://..." />
+        </div>
+        <div class="input-group">
+            <label>JSON Output (Regions -> Lines -> Segments)</label>
+            <textarea id="json-data" spellcheck="false"></textarea>
+        </div>
+        <div id="error-msg"></div>
+        <div style="display:flex; justify-content: flex-end; gap: 10px;">
+            <button onclick="loadExample()">Load Example Data</button>
+            <button class="primary" onclick="launchViewer()">Render Visualization</button>
+        </div>
+    </div>
+</div>
+
+<header>
+    <h1>Archivist Transcription Viewer</h1>
+    <div class="controls">
+        <button onclick="document.getElementById('setup-view').style.display='flex'">Load Data</button>
+    </div>
+</header>
+
+<main>
+    <div class="image-pane">
+        <div class="canvas-wrapper" id="canvas-wrapper">
+            <img id="target-image" src="" alt="Manuscript" />
+            <div id="overlay-layer" class="overlay-layer"></div>
+        </div>
+    </div>
+    <div class="text-pane" id="text-pane">
+    </div>
+</main>
+
+<script>
+    // --- Configuration ---
+    // Hardcoded 1000x1000 normalization
+    const REF_SCALE = 1000;
+
+    // --- Example Data ---
+    const EX_URL = "https://iiif-cloud.princeton.edu/iiif/2/67%2Fb9%2F7c%2F67b97cf5092d4bcd9df273b83ccf6c6f%2Fintermediate_file/full/1000,1626/0/default.jpg";
+    const EX_JSON = [
+  {
+    "region_type": "header",
+    "box_2d": [50, 50, 250, 300],
+    "lines": [
+      {
+        "line_number": 1,
+        "box_2d": [60, 60, 240, 290],
+        "segments": [
+          { "text": "The Bluest Eye", "type": "base", "box_2d": [60, 60, 240, 290], "style": "none" }
+        ]
+      }
+    ]
+  },
+  {
+    "region_type": "deleted_block",
+    "box_2d": [140, 150, 260, 900],
+    "lines": [
+      {
+        "line_number": 1,
+        "box_2d": [145, 150, 180, 850],
+        "segments": [
+          { "text": "On the southeast corner of", "type": "deletion", "box_2d": [145, 150, 180, 850], "style": "none" }
+        ]
+      },
+      {
+        "line_number": 2,
+        "box_2d": [180, 150, 210, 890],
+        "segments": [
+          { "text": "Broadway and 31st Street there is a pizza", "type": "deletion", "box_2d": [180, 150, 210, 890], "style": "none" }
+        ]
+      },
+      {
+        "line_number": 3,
+        "box_2d": [210, 150, 240, 870],
+        "segments": [
+          { "text": "parlour where slow-footed teenagers", "type": "deletion", "box_2d": [210, 150, 240, 870], "style": "none" }
+        ]
+      },
+      {
+        "line_number": 4,
+        "box_2d": [240, 150, 265, 660],
+        "segments": [
+          { "text": "group to smoke cigarettes.", "type": "deletion", "box_2d": [240, 150, 265, 660], "style": "none" }
+        ]
+      }
+    ]
+  },
+  {
+    "region_type": "paragraph",
+    "box_2d": [270, 50, 980, 980],
+    "lines": [
+      {
+        "line_number": 1,
+        "box_2d": [270, 50, 325, 980],
+        "segments": [
+          { "text": "A particularly dreary abandoned store stands", "type": "insertion", "box_2d": [270, 50, 305, 450], "style": "none" },
+          { "text": "On the", "type": "deletion", "box_2d": [305, 180, 325, 300], "style": "none" },
+          { "text": "southeast", "type": "insertion", "box_2d": [290, 330, 308, 420], "style": "none" },
+          { "text": "corner of Broadway and 31st Street", "type": "base", "box_2d": [300, 350, 330, 980], "style": "none" }
+        ]
+      },
+      {
+        "line_number": 2,
+        "box_2d": [330, 140, 370, 910],
+        "segments": [
+          { "text": "there stands an abandoned store which", "type": "deletion", "box_2d": [330, 140, 360, 750], "style": "none" },
+          { "text": "particularly dreary", "type": "deletion", "box_2d": [355, 170, 375, 580], "style": "none" }
+        ]
+      },
+      {
+        "line_number": 3,
+        "box_2d": [360, 730, 380, 900],
+        "segments": [
+          { "text": "It does not", "type": "base", "box_2d": [360, 730, 380, 900], "style": "none" }
+        ]
+      },
+      {
+        "line_number": 4,
+        "box_2d": [375, 180, 405, 920],
+        "segments": [
+          { "text": "recede into its background of", "type": "base", "box_2d": [375, 180, 400, 680], "style": "none" },
+          { "text": "empty", "type": "insertion", "box_2d": [370, 830, 385, 900], "style": "none" },
+          { "text": "other", "type": "deletion", "box_2d": [380, 700, 400, 790], "style": "none" },
+          { "text": "stores,", "type": "base", "box_2d": [380, 800, 405, 920], "style": "none" }
+        ]
+      },
+      {
+        "line_number": 5,
+        "box_2d": [400, 190, 425, 910],
+        "segments": [
+          { "text": "but rather foists itself on the eye", "type": "base", "box_2d": [400, 190, 425, 910], "style": "none" }
+        ]
+      },
+      {
+        "line_number": 6,
+        "box_2d": [425, 170, 455, 890],
+        "segments": [
+          { "text": "in a manner that is both", "type": "insertion", "box_2d": [418, 200, 438, 470], "style": "none" },
+          { "text": "as an", "type": "deletion", "box_2d": [430, 170, 448, 260], "style": "none" },
+          { "text": "irritant and a melancholy.", "type": "base", "box_2d": [430, 280, 455, 710], "style": "none" }
+        ]
+      },
+      {
+        "line_number": 7,
+        "box_2d": [450, 165, 478, 890],
+        "segments": [
+          { "text": "Vistors driving along Broadway wonder", "type": "base", "box_2d": [450, 165, 478, 890], "style": "none" }
+        ]
+      },
+      {
+        "line_number": 8,
+        "box_2d": [475, 180, 500, 880],
+        "segments": [
+          { "text": "why it", "type": "base", "box_2d": [475, 180, 500, 300], "style": "none" },
+          { "text": "still", "type": "deletion", "box_2d": [475, 310, 495, 410], "style": "none" },
+          { "text": "has not been torn down", "type": "base", "box_2d": [475, 420, 495, 880], "style": "none" }
+        ]
+      },
+      {
+        "line_number": 9,
+        "box_2d": [495, 175, 522, 830],
+        "segments": [
+          { "text": "while pedestrians in the neighborhood", "type": "base", "box_2d": [495, 175, 522, 830], "style": "none" }
+        ]
+      },
+      {
+        "line_number": 10,
+        "box_2d": [520, 180, 548, 890],
+        "segments": [
+          { "text": "simply look away when they pass it.", "type": "base", "box_2d": [520, 180, 548, 890], "style": "none" }
+        ]
+      },
+      {
+        "line_number": 11,
+        "box_2d": [545, 180, 575, 970],
+        "segments": [
+          { "text": "Those who have lived", "type": "base", "box_2d": [545, 180, 568, 600], "style": "none" },
+          { "text": "in that part of town for", "type": "insertion", "box_2d": [535, 620, 555, 900], "style": "none" },
+          { "text": "here", "type": "deletion", "box_2d": [545, 630, 565, 750], "style": "none" },
+          { "text": "fifty", "type": "insertion", "box_2d": [540, 800, 560, 880], "style": "none" },
+          { "text": "years", "type": "base", "box_2d": [550, 890, 575, 970], "style": "none" }
+        ]
+      },
+      {
+        "line_number": 12,
+        "box_2d": [570, 185, 595, 890],
+        "segments": [
+          { "text": "remember when it was a Hungarian", "type": "base", "box_2d": [570, 185, 595, 890], "style": "none" }
+        ]
+      },
+      {
+        "line_number": 13,
+        "box_2d": [595, 180, 622, 900],
+        "segments": [
+          { "text": "Bakery well known for Brioche and", "type": "base", "box_2d": [595, 180, 622, 900], "style": "none" }
+        ]
+      },
+      {
+        "line_number": 14,
+        "box_2d": [620, 180, 648, 870],
+        "segments": [
+          { "text": "poppy seed bread.", "type": "base", "box_2d": [620, 180, 648, 540], "style": "none" },
+          { "text": "Though", "type": "deletion", "box_2d": [620, 580, 640, 780], "style": "none" },
+          { "text": "So", "type": "base", "box_2d": [620, 820, 638, 870], "style": "none" }
+        ]
+      },
+      {
+        "line_number": 15,
+        "box_2d": [640, 200, 670, 920],
+        "segments": [
+          { "text": "fluid and transient", "type": "base", "box_2d": [645, 200, 670, 580], "style": "none" },
+          { "text": "has", "type": "insertion", "box_2d": [638, 600, 655, 660], "style": "none" },
+          { "text": "is", "type": "deletion", "box_2d": [645, 620, 665, 660], "style": "none" },
+          { "text": "the population", "type": "base", "box_2d": [645, 670, 670, 920], "style": "none" }
+        ]
+      },
+      {
+        "line_number": 16,
+        "box_2d": [665, 180, 692, 840],
+        "segments": [
+          { "text": "in that area", "type": "insertion", "box_2d": [658, 170, 675, 300], "style": "none" },
+          { "text": "these days", "type": "deletion", "box_2d": [665, 220, 685, 420], "style": "none" },
+          { "text": "been that few persons can", "type": "base", "box_2d": [665, 430, 692, 840], "style": "none" }
+        ]
+      },
+      {
+        "line_number": 17,
+        "box_2d": [688, 190, 715, 910],
+        "segments": [
+          { "text": "recall the time before that when it", "type": "base", "box_2d": [688, 190, 715, 910], "style": "none" }
+        ]
+      },
+      {
+        "line_number": 18,
+        "box_2d": [715, 175, 742, 960],
+        "segments": [
+          { "text": "was a pizza parlour where slow-footed", "type": "base", "box_2d": [715, 175, 742, 960], "style": "none" }
+        ]
+      },
+      {
+        "line_number": 19,
+        "box_2d": [740, 180, 768, 930],
+        "segments": [
+          { "text": "teenagers grouped", "type": "base", "box_2d": [740, 180, 765, 560], "style": "none" },
+          { "text": "while they", "type": "insertion", "box_2d": [730, 630, 748, 790], "style": "none" },
+          { "text": "to", "type": "deletion", "box_2d": [742, 580, 760, 620], "style": "none" },
+          { "text": "smoked", "type": "insertion", "box_2d": [740, 630, 760, 730], "style": "none" },
+          { "text": "smoke", "type": "deletion", "box_2d": [742, 630, 760, 740], "style": "none" },
+          { "text": "cigarettes,", "type": "base", "box_2d": [742, 750, 768, 930], "style": "none" }
+        ]
+      },
+      {
+        "line_number": 20,
+        "box_2d": [765, 180, 792, 900],
+        "segments": [
+          { "text": "feel their groins and played wild out-", "type": "base", "box_2d": [765, 180, 792, 900], "style": "none" }
+        ]
+      },
+      {
+        "line_number": 21,
+        "box_2d": [785, 190, 815, 970],
+        "segments": [
+          { "text": "rages).", "type": "base", "box_2d": [790, 200, 815, 310], "style": "none" },
+          { "text": "(in the entire town I should say)", "type": "insertion", "box_2d": [780, 620, 802, 970], "style": "none" },
+          { "text": "Probably no one remembers,", "type": "base", "box_2d": [790, 340, 815, 800], "style": "none" }
+        ]
+      },
+      {
+        "line_number": 22,
+        "box_2d": [815, 200, 840, 950],
+        "segments": [
+          { "text": "even", "type": "deletion", "box_2d": [815, 200, 835, 290], "style": "none" },
+          { "text": "long", "type": "deletion", "box_2d": [815, 310, 840, 410], "style": "none" },
+          { "text": "longer ago when", "type": "base", "box_2d": [815, 440, 840, 750], "style": "none" },
+          { "text": "this street", "type": "insertion", "box_2d": [810, 770, 830, 950], "style": "none" },
+          { "text": "it", "type": "deletion", "box_2d": [815, 900, 830, 940], "style": "none" }
+        ]
+      },
+      {
+        "line_number": 23,
+        "box_2d": [835, 185, 862, 910],
+        "segments": [
+          { "text": "was", "type": "deletion", "box_2d": [835, 185, 855, 270], "style": "none" },
+          { "text": "where", "type": "deletion", "box_2d": [835, 280, 855, 360], "style": "none" },
+          { "text": "Eunice Winder lived", "type": "base", "box_2d": [835, 380, 862, 780], "style": "none" },
+          { "text": "there.", "type": "deletion", "box_2d": [835, 790, 858, 910], "style": "none" }
+        ]
+      },
+      {
+        "line_number": 24,
+        "box_2d": [860, 240, 885, 850],
+        "segments": [
+          { "text": "The Winder family didn't live in a", "type": "base", "box_2d": [860, 240, 885, 850], "style": "none" }
+        ]
+      },
+      {
+        "line_number": 25,
+        "box_2d": [885, 200, 910, 890],
+        "segments": [
+          { "text": "store front because the war was just", "type": "base", "box_2d": [885, 200, 910, 890], "style": "none" }
+        ]
+      },
+      {
+        "line_number": 26,
+        "box_2d": [908, 200, 938, 970],
+        "segments": [
+          { "text": "over and housing", "type": "base", "box_2d": [910, 200, 935, 490], "style": "none" },
+          { "text": "temporary", "type": "insertion", "box_2d": [902, 500, 918, 580], "style": "none" },
+          { "text": "difficulty", "type": "deletion", "box_2d": [910, 500, 938, 660], "style": "none" },
+          { "text": "reporting to the cutbacks at the plant;", "type": "insertion", "box_2d": [898, 660, 925, 970], "style": "none" }
+        ]
+      },
+      {
+        "line_number": 27,
+        "box_2d": [935, 175, 960, 940],
+        "segments": [
+          { "text": "They lived", "type": "insertion", "box_2d": [925, 690, 945, 820], "style": "none" },
+          { "text": "there because", "type": "deletion", "box_2d": [935, 175, 960, 420], "style": "none" },
+          { "text": "they were poor", "type": "base", "box_2d": [935, 430, 960, 700], "style": "none" },
+          { "text": "and", "type": "deletion", "box_2d": [935, 740, 952, 830], "style": "none" },
+          { "text": "sloven", "type": "base", "box_2d": [935, 850, 955, 940], "style": "none" }
+        ]
+      },
+      {
+        "line_number": 28,
+        "box_2d": [955, 200, 985, 940],
+        "segments": [
+          { "text": "and mean.", "type": "deletion", "box_2d": [960, 200, 980, 370], "style": "none" },
+          { "text": "orderly. After all the", "type": "insertion", "box_2d": [948, 360, 970, 600], "style": "none" },
+          { "text": "But,", "type": "base", "box_2d": [960, 400, 980, 470], "style": "none" },
+          { "text": "which they were too,", "type": "deletion", "box_2d": [960, 490, 980, 850], "style": "none" },
+          { "text": "their poverty was congenital, one felt", "type": "insertion", "box_2d": [948, 610, 968, 850], "style": "none" },
+          { "text": "the", "type": "base", "box_2d": [960, 880, 980, 940], "style": "none" }
+        ]
+      }
+    ]
+  }
+];
+
+    // --- Init ---
+    function loadExample() {
+        document.getElementById('img-url').value = EX_URL;
+        document.getElementById('json-data').value = JSON.stringify(EX_JSON, null, 2);
+    }
+
+    function launchViewer() {
+        const url = document.getElementById('img-url').value.trim();
+        const jsonStr = document.getElementById('json-data').value.trim();
+        const errMsg = document.getElementById('error-msg');
+        
+        errMsg.style.display = 'none';
+
+        try {
+            if(!url || !jsonStr) throw new Error("Missing URL or JSON data");
+            const data = JSON.parse(jsonStr);
+            if(!Array.isArray(data)) throw new Error("JSON root must be an Array of Regions");
+
+            // Setup View
+            document.getElementById('setup-view').style.display = 'none';
+            const img = document.getElementById('target-image');
+            img.src = url;
+            
+            buildUI(data);
+
+        } catch (e) {
+            errMsg.textContent = e.message;
+            errMsg.style.display = 'block';
+        }
+    }
+
+    // --- Build Logic ---
+    function buildUI(regions) {
+        const overlay = document.getElementById('overlay-layer');
+        const textPane = document.getElementById('text-pane');
+        
+        overlay.innerHTML = '';
+        textPane.innerHTML = '';
+
+        let globalCounter = 0;
+
+        regions.forEach((region) => {
+            // 1. Region Box (Image)
+            if(region.box_2d) {
+                const rBox = createBox(region.box_2d, 'bbox-region');
+                rBox.setAttribute('data-label', region.region_type);
+                overlay.appendChild(rBox);
+            }
+
+            // 2. Region Text Container
+            const regionDiv = document.createElement('div');
+            regionDiv.className = `region region-${region.region_type}`;
+            const label = document.createElement('div');
+            label.className = 'region-label';
+            label.textContent = region.region_type;
+            regionDiv.appendChild(label);
+
+            // 3. Lines
+            if(region.lines) {
+                region.lines.forEach(line => {
+                    const lineDiv = document.createElement('div');
+                    lineDiv.className = 'line';
+                    lineDiv.dir = 'auto';
+
+                    if(line.segments) {
+                        line.segments.forEach(seg => {
+                            if(!seg.box_2d) return;
+                            
+                            const uniqueId = `id-${globalCounter++}`;
+
+                            // --- A. Box on Image ---
+                            const sBox = createBox(seg.box_2d, 'bbox-segment');
+                            sBox.id = `box-${uniqueId}`;
+                            
+                            // Hover Effects
+                            sBox.onmouseenter = () => activate(uniqueId);
+                            sBox.onmouseleave = () => deactivate(uniqueId);
+                            
+                            // NEW: Click to scroll to Text
+                            sBox.onclick = (e) => {
+                                e.stopPropagation(); // Prevent clicking through to parent layers
+                                const targetSpan = document.getElementById(`span-${uniqueId}`);
+                                if(targetSpan) {
+                                    targetSpan.scrollIntoView({ 
+                                        behavior: 'smooth', 
+                                        block: 'center' 
+                                    });
+                                    // Optional: momentary flash could be added here
+                                }
+                            };
+
+                            overlay.appendChild(sBox);
+
+                            // --- B. Span in Text ---
+                            const sSpan = document.createElement('span');
+                            
+                            // Combine Type and Style classes
+                            let classes = `seg seg-${seg.type}`;
+                            if (seg.style && seg.style !== 'none') {
+                                classes += ` style-${seg.style}`;
+                            }
+                            
+                            sSpan.className = classes;
+                            sSpan.id = `span-${uniqueId}`;
+                            sSpan.textContent = seg.text + " "; 
+                            
+                            // Hover Effects
+                            sSpan.onmouseenter = () => activate(uniqueId);
+                            sSpan.onmouseleave = () => deactivate(uniqueId);
+
+                            // NEW: Click to scroll to Image Box
+                            sSpan.onclick = (e) => {
+                                e.stopPropagation();
+                                const targetBox = document.getElementById(`box-${uniqueId}`);
+                                if(targetBox) {
+                                    targetBox.scrollIntoView({ 
+                                        behavior: 'smooth', 
+                                        block: 'center',
+                                        inline: 'center' // Helps if image is zoomed/horizontally scrolled
+                                    });
+                                }
+                            };
+
+                            lineDiv.appendChild(sSpan);
+                        });
+                    }
+                    regionDiv.appendChild(lineDiv);
+                });
+            }
+            textPane.appendChild(regionDiv);
+        });
+    }
+
+    function createBox(coords, className) {
+        // Coords are [y1, x1, y2, x2] normalized to 1000
+        const [y1, x1, y2, x2] = coords;
+        const div = document.createElement('div');
+        div.className = `bbox ${className}`;
+        
+        const top = (y1 / REF_SCALE) * 100;
+        const left = (x1 / REF_SCALE) * 100;
+        const height = ((y2 - y1) / REF_SCALE) * 100;
+        const width = ((x2 - x1) / REF_SCALE) * 100;
+
+        div.style.top = `${top}%`;
+        div.style.left = `${left}%`;
+        div.style.height = `${height}%`;
+        div.style.width = `${width}%`;
+        
+        return div;
+    }
+
+    // --- Interaction ---
+    function activate(uid) {
+        const box = document.getElementById(`box-${uid}`);
+        const span = document.getElementById(`span-${uid}`);
+        if(box) box.classList.add('active');
+        if(span) span.classList.add('active');
+    }
+
+    function deactivate(uid) {
+        const box = document.getElementById(`box-${uid}`);
+        const span = document.getElementById(`span-${uid}`);
+        if(box) box.classList.remove('active');
+        if(span) span.classList.remove('active');
+    }
+
+    // --- Auto-Load via URL Parameters ---
+    window.addEventListener('DOMContentLoaded', () => {
+        const params = new URLSearchParams(window.location.search);
+        const imgUrl = params.get('img');
+        const dataUrl = params.get('data') || params.get('gist'); // accept 'data' or 'gist'
+
+        if (imgUrl && dataUrl) {
+            // 1. Populate the Image URL input
+            document.getElementById('img-url').value = imgUrl;
+
+            // 2. Fetch the JSON data
+            fetch(dataUrl)
+                .then(response => {
+                    if (!response.ok) throw new Error("Failed to fetch JSON data from URL");
+                    return response.text(); // Get as text to populate textarea
+                })
+                .then(text => {
+                    // 3. Populate JSON textarea
+                    document.getElementById('json-data').value = text;
+                    
+                    // 4. Trigger the existing launch logic
+                    launchViewer();
+                })
+                .catch(err => {
+                    console.error("Auto-load error:", err);
+                    const errDiv = document.getElementById('error-msg');
+                    errDiv.textContent = "Error loading URL parameters: " + err.message;
+                    errDiv.style.display = 'block';
+                });
+        }
+    });
+
+</script>
+</body>
+</html>
