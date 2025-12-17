@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCR Line Evaluator</title>
+    <style>
+        :root {
+            --bg-color: #f8fafc;
+            --border-color: #e2e8f0;
+            --primary-color: #3b82f6;
+            --success-color: #22c55e;
+            --danger-color: #ef4444;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --sidebar-width: 400px;
+            --detail-height: 350px; 
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* --- HEADER --- */
+        .app-header {
+            padding: 10px 20px;
+            background: white;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+            height: 50px;
+        }
+
+        /* --- MAIN LAYOUT --- */
+        .main-workspace {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .workspace-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* --- VISUALIZER --- */
+        .viz-panel {
+            flex: 1;
+            background: #e5e5e5;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .viz-toolbar {
+            padding: 8px 15px;
+            background: white;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            gap: 15px;
+            font-size: 13px;
+        }
+
+        .viz-canvas {
+            flex: 1;
+            overflow: auto;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 40px;
+        }
+
+        .image-wrapper {
+            position: relative;
+            display: inline-block;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            background: white;
+            transition: width 0.2s ease;
+        }
+
+        .source-image { display: block; width: 100%; height: auto; }
+        .box-layer { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
+
+        /* BOX STYLES */
+        .bbox {
+            position: absolute;
+            border: 2px solid;
+            cursor: pointer;
+            opacity: 0.5;
+            z-index: 10;
+        }
+        .bbox:hover { opacity: 1; z-index: 20; box-shadow: 0 0 0 2px white; }
+        .bbox.active { opacity: 1; z-index: 20; border-width: 3px; box-shadow: 0 0 0 2px white, 0 0 0 5px var(--primary-color); }
+        .bbox-gt { border-color: #22c55e; background: rgba(34, 197, 94, 0.1); }
+        .bbox-eval { border-color: #ef4444; background: rgba(239, 68, 68, 0.1); }
+
+        /* --- SIDEBAR --- */
+        .sidebar-panel {
+            width: var(--sidebar-width);
+            background: white;
+            border-left: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+            z-index: 20;
+        }
+        
+        .sidebar-content { flex: 1; overflow-y: auto; padding: 10px; }
+
+        .comp-card {
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 10px;
+            margin-bottom: 8px;
+            background: white;
+            cursor: pointer;
+            border-left: 3px solid transparent;
+            font-size: 13px;
+        }
+        .comp-card:hover { border-color: #cbd5e1; }
+        .comp-card.active { border-left-color: var(--primary-color); background: #eff6ff; border-color: #bfdbfe; }
+        .comp-row { margin-bottom: 6px; }
+        .comp-lbl { font-size: 10px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; }
+        .comp-txt { font-family: Georgia, serif; line-height: 1.3; margin-top: 2px; overflow-wrap: break-word; }
+
+        /* --- DETAIL PANEL --- */
+        .detail-panel {
+            height: var(--detail-height);
+            background: white;
+            border-top: 1px solid var(--border-color);
+            box-shadow: 0 -4px 10px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            z-index: 1000; 
+            transform: translateY(100%);
+            transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+        }
+        .detail-panel.visible { transform: translateY(0); }
+
+        .detail-header {
+            padding: 8px 20px;
+            border-bottom: 1px solid var(--border-color);
+            background: #f1f5f9;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .detail-stats { display: flex; gap: 20px; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; }
+        .stat-val { color: var(--text-primary); font-size: 14px; font-weight: 800; margin-left: 6px; }
+
+        .detail-grid {
+            flex: 1;
+            display: grid;
+            grid-template-rows: 1fr 1fr;
+            overflow: hidden;
+        }
+
+        .compare-row {
+            display: grid;
+            grid-template-columns: 80px minmax(0, 2fr) minmax(0, 1fr);
+            border-bottom: 1px solid var(--border-color);
+            overflow: hidden;
+        }
+        
+        .row-label {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            writing-mode: vertical-rl;
+            transform: rotate(180deg);
+            background: #f8fafc;
+            border-right: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            letter-spacing: 1px;
+        }
+        .lbl-gt { color: var(--success-color); background: #f0fdf4; }
+        .lbl-ev { color: var(--danger-color); background: #fef2f2; }
+
+        .cutout-area {
+            background: #333; 
+            background-image: linear-gradient(#444 1px, transparent 1px), linear-gradient(90deg, #444 1px, transparent 1px);
+            background-size: 20px 20px;
+            padding: 10px;
+            border-right: 1px solid var(--border-color);
+            overflow-x: auto;
+            overflow-y: hidden;
+            display: flex;
+            align-items: center;
+        }
+        
+        .cutout-canvas {
+            height: 100%; 
+            width: auto; 
+            max-width: none; 
+            border: 1px solid rgba(255,255,255,0.3);
+            background: white;
+        }
+
+        .text-area {
+            padding: 15px;
+            overflow-y: auto;
+            font-family: Georgia, serif;
+            font-size: 18px;
+            line-height: 1.5;
+            display: block; 
+            word-break: break-all; 
+            overflow-wrap: anywhere;
+            white-space: pre-wrap;
+        }
+
+        .diff-add { background-color: #bbf7d0; color: #166534; }
+        .diff-del { background-color: #fecaca; color: #991b1b; text-decoration: line-through; }
+        .diff-equal { color: var(--text-primary); }
+
+        .tag-match { color: var(--success-color); }
+        .tag-mismatch { color: var(--danger-color); }
+
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 2000; display: flex; justify-content: center; align-items: center; }
+        .input-card { background: white; width: 800px; height: 80vh; border-radius: 8px; padding: 30px; display: flex; flex-direction: column; gap: 20px; }
+        .input-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; flex: 1; }
+        textarea { width: 100%; height: 100%; border: 1px solid #ccc; font-family: monospace; resize: none; padding: 10px; }
+        .btn-primary { background: var(--primary-color); color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+<div id="setup-modal" class="modal-overlay">
+    <div class="input-card">
+        <h2 style="margin:0;">Load OCR Data</h2>
+        <div style="display:flex; gap:10px;">
+            <input type="text" id="input-url" style="flex:1; padding:10px; border:1px solid #ccc; border-radius:4px;" placeholder="Image URL">
+            <button class="btn-primary" onclick="loadPlaceholder()">Use Sample</button>
+        </div>
+        <div class="input-grid">
+            <textarea id="input-gt" placeholder="Ground Truth JSON..."></textarea>
+            <textarea id="input-eval" placeholder="Evaluation JSON..."></textarea>
+        </div>
+        <div style="text-align: right;">
+            <button class="btn-primary" onclick="initializeViewer()">Visualize</button>
+        </div>
+    </div>
+</div>
+
+<div class="app-header">
+    <h3 style="margin:0;">OCR Evaluator (Line Mode)</h3>
+    <div style="display:flex; gap:20px; font-size:12px; color:#64748b;">
+        <span>CER: <b id="m-cer" style="color:black; font-size:14px;">-</b></span>
+        <span>Avg IoU: <b id="m-iou" style="color:black; font-size:14px;">-</b></span>
+    </div>
+    <button onclick="document.getElementById('setup-modal').style.display='flex'" style="padding:6px 12px; cursor:pointer;">New Load</button>
+</div>
+
+<div class="main-workspace">
+    <div class="workspace-content">
+        <div class="viz-panel">
+            <div class="viz-toolbar">
+                <label>Zoom: <input type="range" min="20" max="200" value="100" oninput="setZoom(this.value)"></label>
+                <span id="zoom-disp">100%</span>
+            </div>
+            <div class="viz-canvas" id="main-canvas-container">
+                <div class="image-wrapper" id="img-wrapper" style="width: 800px;">
+                    <img id="main-image" class="source-image" src="" alt="">
+                    <div id="box-layer" class="box-layer"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="detail-panel" id="detail-panel">
+            <div class="detail-header">
+                <div class="detail-stats">
+                    <span>Line IoU: <span id="focus-iou" class="stat-val">-</span></span>
+                    <span>Line CER: <span id="focus-cer" class="stat-val">-</span></span>
+                </div>
+                <button onclick="closeDetail()" style="background:none; border:none; font-size:24px; cursor:pointer; line-height:1;">&times;</button>
+            </div>
+            
+            <div class="detail-grid">
+                <div class="compare-row">
+                    <div class="row-label lbl-gt">Ground Truth</div>
+                    <div class="cutout-area">
+                        <canvas id="canvas-gt" class="cutout-canvas"></canvas>
+                    </div>
+                    <div class="text-area" id="text-gt"></div>
+                </div>
+
+                <div class="compare-row" style="border-bottom:none;">
+                    <div class="row-label lbl-ev">Generated</div>
+                    <div class="cutout-area">
+                        <canvas id="canvas-ev" class="cutout-canvas"></canvas>
+                    </div>
+                    <div class="text-area" id="text-ev"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="sidebar-panel">
+        <div style="padding:15px; border-bottom:1px solid #e2e8f0; background:#f8fafc;">
+            <strong>Items (Lines)</strong>
+        </div>
+        <div class="sidebar-content" id="sidebar-list"></div>
+    </div>
+</div>
+
+<script>
+    // --- STATE ---
+    let globalData = [];
+    let nativeImgWidth = 0;
+    let nativeImgHeight = 0;
+    
+    // --- SETUP ---
+    function initializeViewer() {
+        const url = document.getElementById('input-url').value;
+        const gtStr = document.getElementById('input-gt').value;
+        const evStr = document.getElementById('input-eval').value;
+        
+        try {
+            const gt = JSON.parse(gtStr);
+            const ev = JSON.parse(evStr);
+            processData(gt, ev);
+        } catch(e) { 
+            console.error(e);
+            return alert("Invalid JSON"); 
+        }
+
+        const img = document.getElementById('main-image');
+        if(url) {
+            img.onload = () => {
+                nativeImgWidth = img.naturalWidth;
+                nativeImgHeight = img.naturalHeight;
+                setZoom(100);
+                document.getElementById('setup-modal').style.display = 'none';
+            };
+            img.src = url;
+        } else {
+            // No Image Mode
+            nativeImgWidth = 1000; nativeImgHeight = 1000;
+            img.style.display = 'none';
+            document.getElementById('img-wrapper').style.height = "1000px";
+            document.getElementById('img-wrapper').style.background = "white";
+            setZoom(100);
+            document.getElementById('setup-modal').style.display = 'none';
+        }
+    }
+
+    // --- LOGIC ---
+    function processData(gtRaw, evRaw) {
+        // Flatten now targets LINES, not segments
+        const gtList = flatten(gtRaw);
+        const evList = flatten(evRaw);
+
+        // Global Metrics
+        const fullGt = gtList.map(x=>x.text).join(' ');
+        const fullEv = evList.map(x=>x.text).join(' ');
+        const cer = calcLevenshteinRate(fullGt, fullEv);
+
+        // Alignment (Greedy IoU)
+        globalData = [];
+        let pool = [...evList];
+        let matches = 0, totalIoU = 0;
+
+        gtList.forEach(g => {
+            let bestScore = 0, bestIdx = -1;
+            pool.forEach((e, i) => {
+                const score = calcIoU(g.box, e.box);
+                if(score > bestScore) { bestScore = score; bestIdx = i; }
+            });
+
+            let match = null;
+            if(bestScore > 0.01) { // Threshold
+                match = pool[bestIdx];
+                pool.splice(bestIdx, 1);
+                matches++;
+                totalIoU += bestScore;
+            }
+            globalData.push({ gt: g, ev: match, iou: bestScore, id: Math.random().toString(36).substr(2,9) });
+        });
+
+        // Add hallucinations
+        pool.forEach(e => globalData.push({ gt: null, ev: e, iou: 0, id: Math.random().toString(36).substr(2,9) }));
+
+        // UI
+        document.getElementById('m-cer').innerText = cer + '%';
+        document.getElementById('m-iou').innerText = matches ? (totalIoU/matches).toFixed(2) : '0';
+        renderSidebar();
+        renderBoxes();
+    }
+
+    function renderSidebar() {
+        const con = document.getElementById('sidebar-list');
+        con.innerHTML = '';
+        globalData.forEach(item => {
+            const card = document.createElement('div');
+            card.className = 'comp-card';
+            card.id = `card-${item.id}`;
+            card.onclick = () => activateItem(item.id);
+            
+            // Status
+            let status = `<span class="tag-mismatch">MISSING</span>`;
+            if(item.gt && item.ev) {
+                status = (item.gt.text === item.ev.text) 
+                    ? `<span class="tag-match">MATCH</span>` 
+                    : `<span class="tag-mismatch">DIFF</span>`;
+            }
+
+            card.innerHTML = `
+                <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                    <span class="comp-lbl">IoU: ${(item.iou*100).toFixed(0)}%</span>
+                    ${status}
+                </div>
+                <div class="comp-row">
+                    <div class="comp-lbl">GT</div>
+                    <div class="comp-txt">${item.gt ? esc(item.gt.text.substring(0,50)) : '--'}</div>
+                </div>
+                <div class="comp-row">
+                    <div class="comp-lbl">EV</div>
+                    <div class="comp-txt">${item.ev ? esc(item.ev.text.substring(0,50)) : '--'}</div>
+                </div>
+            `;
+            con.appendChild(card);
+        });
+    }
+
+    function renderBoxes() {
+        const layer = document.getElementById('box-layer');
+        layer.innerHTML = '';
+        globalData.forEach((item, idx) => {
+            if(item.gt) createBox(item.gt.box, 'bbox-gt', item.id, layer);
+            if(item.ev) createBox(item.ev.box, 'bbox-eval', item.id, layer);
+        });
+    }
+
+    function createBox(box, cls, id, con) {
+        if(!box || box.length < 4) return;
+        const div = document.createElement('div');
+        div.className = `bbox ${cls} box-${id}`;
+        // Assuming box is [y, x, h, w] or [y_min, x_min, y_max, x_max] normalized to 1000
+        // Based on JSON: 46,172,87,981 (y, x, y_max, x_max)
+        div.style.top = (box[0]/10) + '%';
+        div.style.left = (box[1]/10) + '%';
+        div.style.height = ((box[2]-box[0])/10) + '%';
+        div.style.width = ((box[3]-box[1])/10) + '%';
+        div.onclick = (e) => { e.stopPropagation(); activateItem(id); };
+        con.appendChild(div);
+    }
+
+    // --- INTERACTION ---
+    function activateItem(id) {
+        // Highlight
+        document.querySelectorAll('.bbox').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.comp-card').forEach(c => c.classList.remove('active'));
+        
+        document.querySelectorAll(`.box-${id}`).forEach(b => b.classList.add('active'));
+        const card = document.getElementById(`card-${id}`);
+        if(card) {
+            card.classList.add('active');
+            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        // Auto Scroll Main View
+        const item = globalData.find(x => x.id === id);
+        if(item) {
+            const box = item.gt ? item.gt.box : item.ev.box;
+            const wrap = document.getElementById('img-wrapper');
+            const con = document.getElementById('main-canvas-container');
+            
+            // Box center in px
+            const cx = ((box[1] + (box[3]-box[1])/2) / 1000) * wrap.offsetWidth;
+            const cy = ((box[0] + (box[2]-box[0])/2) / 1000) * wrap.offsetHeight;
+
+            con.scrollTo({
+                left: cx - con.clientWidth/2,
+                top: cy - con.clientHeight/2,
+                behavior: 'smooth'
+            });
+
+            // Update Detail Panel
+            updateDetailPanel(item);
+        }
+    }
+
+    function updateDetailPanel(item) {
+        const panel = document.getElementById('detail-panel');
+        const img = document.getElementById('main-image');
+        
+        // 1. Stats
+        const gtTxt = item.gt ? item.gt.text : "";
+        const evTxt = item.ev ? item.ev.text : "";
+        const localCer = calcLevenshteinRate(gtTxt, evTxt);
+        
+        document.getElementById('focus-iou').innerText = (item.iou * 100).toFixed(1) + '%';
+        document.getElementById('focus-cer').innerText = localCer + '%';
+        
+        // 2. Draw Canvases (Cutouts)
+        drawCutout('canvas-gt', item.gt ? item.gt.box : null, img);
+        drawCutout('canvas-ev', item.ev ? item.ev.box : null, img);
+
+        // 3. Text Diffing
+        document.getElementById('text-gt').innerHTML = item.gt ? esc(item.gt.text) : '<span style="color:#ccc; font-style:italic;">Missing</span>';
+        document.getElementById('text-ev').innerHTML = diffText(gtTxt, evTxt);
+
+        panel.classList.add('visible');
+    }
+
+    function drawCutout(canvasId, box, imgEl) {
+        const canvas = document.getElementById(canvasId);
+        const ctx = canvas.getContext('2d');
+        
+        if(!box || !imgEl.src) {
+            ctx.clearRect(0,0,canvas.width,canvas.height);
+            canvas.style.width = '0px';
+            return;
+        }
+
+        const dpr = window.devicePixelRatio || 1;
+
+        // Box is 0-1000 relative
+        const x = (box[1]/1000) * nativeImgWidth;
+        const y = (box[0]/1000) * nativeImgHeight;
+        const w = ((box[3]-box[1])/1000) * nativeImgWidth;
+        const h = ((box[2]-box[0])/1000) * nativeImgHeight;
+
+        // Add padding
+        const pad = Math.max(w, h) * 0.02; // 2% padding
+        
+        canvas.width = (w + pad*2) * dpr;
+        canvas.height = (h + pad*2) * dpr;
+        
+        // IMPORTANT: Reset style width so it can be handled by CSS
+        canvas.style.width = ''; 
+
+        ctx.scale(dpr, dpr);
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(0,0, w+pad*2, h+pad*2);
+        
+        try {
+            ctx.drawImage(imgEl, x, y, w, h, pad, pad, w, h);
+        } catch(e) { console.error("Canvas draw error", e); }
+    }
+
+    function closeDetail() {
+        document.getElementById('detail-panel').classList.remove('visible');
+    }
+
+    // --- UTILS ---
+    function setZoom(v) {
+        document.getElementById('img-wrapper').style.width = (nativeImgWidth ? (nativeImgWidth*(v/100)) : (800*(v/100))) + 'px';
+        document.getElementById('zoom-disp').innerText = v + '%';
+    }
+
+    // UPDATED: Now flattens based on Lines, ignoring segment boxes
+    function flatten(json) {
+        let arr = [];
+        if(!Array.isArray(json)) return arr;
+        
+        json.forEach(reg => {
+            if(reg.lines) {
+                reg.lines.forEach(line => {
+                    // Use LINE box
+                    const lineBox = line.box_2d;
+                    
+                    // Aggregate Segment Text
+                    let fullText = "";
+                    if(line.segments) {
+                        // Use join('') because evaluation segments sometimes contain leading spaces
+                        fullText = line.segments.map(s => s.text).join(""); 
+                    }
+                    
+                    if(lineBox && lineBox.length === 4) {
+                        arr.push({ text: fullText, box: lineBox });
+                    }
+                });
+            }
+        });
+        return arr;
+    }
+
+    function calcIoU(a, b) {
+        const xA=Math.max(a[1],b[1]), yA=Math.max(a[0],b[0]), xB=Math.min(a[3],b[3]), yB=Math.min(a[2],b[2]);
+        if(xB<xA || yB<yA) return 0;
+        const inter=(xB-xA)*(yB-yA), areaA=(a[3]-a[1])*(a[2]-a[0]), areaB=(b[3]-b[1])*(b[2]-b[0]);
+        return inter/(areaA+areaB-inter);
+    }
+
+    function calcLevenshteinRate(a, b) {
+        if(!a || !a.length) return 0;
+        if(!b) b="";
+        const m = [];
+        for(let i=0; i<=b.length; i++){ m[i]=[i]; if(i===0) for(let j=0; j<=a.length; j++) m[0][j]=j; }
+        for(let i=1; i<=b.length; i++){
+            for(let j=1; j<=a.length; j++){
+                if(b[i-1]===a[j-1]) m[i][j] = m[i-1][j-1];
+                else m[i][j] = Math.min(m[i-1][j-1]+1, m[i][j-1]+1, m[i-1][j]+1);
+            }
+        }
+        return ((m[b.length][a.length] / a.length) * 100).toFixed(2);
+    }
+
+    function diffText(gt, ev) {
+        if(!gt) return `<span class="diff-add">${esc(ev)}</span>`;
+        if(!ev) return `<span class="diff-del">${esc(gt)}</span>`;
+        if(gt === ev) return `<span class="diff-equal">${esc(ev)}</span>`;
+
+        let html = "";
+        let i=0, j=0;
+        while(i<gt.length && j<ev.length) {
+            if(gt[i] === ev[j]) {
+                html += `<span class="diff-equal">${esc(gt[i])}</span>`;
+                i++; j++;
+            } else {
+                html += `<span class="diff-del">${esc(gt[i])}</span>`;
+                html += `<span class="diff-add">${esc(ev[j])}</span>`;
+                i++; j++;
+            }
+        }
+        if(i < gt.length) html += `<span class="diff-del">${esc(gt.substring(i))}</span>`;
+        if(j < ev.length) html += `<span class="diff-add">${esc(ev.substring(j))}</span>`;
+        return html;
+    }
+
+    function esc(s) { return s.replace(/&/g,"&amp;").replace(/</g,"&lt;"); }
+
+    function loadPlaceholder() {
+        // GT Data from Prompt
+        const gt = [{"box_2d":[46,172,638,977],"lines":[{"box_2d":[46,169,87,981],"segments":[{"box_2d":[46,169,87,981],"text":"Whereas there is a purpose of Erecting a Collegiate","type":"base"}]},{"box_2d":[85,171,115,983],"segments":[{"box_2d":[85,171,115,983],"text":"School in the province of New Jersey for the instruc","type":"base"}]},{"box_2d":[112,179,142,942],"segments":[{"box_2d":[112,179,142,942],"text":"ting of youth in the learned Languages liberal","type":"base"}]},{"box_2d":[140,182,167,940],"segments":[{"box_2d":[140,182,167,940],"text":"arts and Sciences We the subscribers in order to","type":"base"}]},{"box_2d":[164,175,194,938],"segments":[{"box_2d":[164,175,194,938],"text":"encourage the same and to promote the said +","type":"base"}]},{"box_2d":[188,179,222,966],"segments":[{"box_2d":[188,179,222,966],"text":"undertaking do hereby promise to pay the several","type":"base"}]},{"box_2d":[220,172,252,977],"segments":[{"box_2d":[220,172,252,977],"text":"sums affixed to our names at or before the first day","type":"base"}]},{"box_2d":[247,186,281,984],"segments":[{"box_2d":[247,186,281,984],"text":"of June next ensuing the date hereof unto Robert","type":"base"}]},{"box_2d":[272,182,305,945],"segments":[{"box_2d":[272,182,305,945],"text":"Hunter Morris and Andrew Johnston Esqrs of","type":"base"}]},{"box_2d":[300,175,332,935],"segments":[{"box_2d":[300,175,332,935],"text":"New Jersey or to James Alexander and William","type":"base"}]},{"box_2d":[330,172,362,973],"segments":[{"box_2d":[330,172,362,973],"text":"Smith Esqrs of New York or to either of the said per=","type":"base"}]},{"box_2d":[361,180,393,972],"segments":[{"box_2d":[361,180,393,972],"text":"sons and as it is only intended to apply the interest","type":"base"}]},{"box_2d":[386,174,423,924],"segments":[{"box_2d":[386,174,423,924],"text":"of the moneys to be subscribed for the purposes","type":"base"}]},{"box_2d":[418,175,452,969],"segments":[{"box_2d":[418,175,452,969],"text":"aforesaid the Subscribers are to be at Liberty either","type":"base"}]},{"box_2d":[447,180,484,965],"segments":[{"box_2d":[447,180,484,965],"text":"to keep the money subscribed in their own hands","type":"base"}]},{"box_2d":[478,177,517,953],"segments":[{"box_2d":[478,177,517,953],"text":"and to pay the Interest after the said first day","type":"base"}]},{"box_2d":[504,182,545,969],"segments":[{"box_2d":[504,182,545,969],"text":"of June yearly or to pay in the principals subscribed","type":"base"}]},{"box_2d":[535,177,578,963],"segments":[{"box_2d":[535,177,578,963],"text":"when they please in order to be put out to interest","type":"base"}]},{"box_2d":[558,177,604,953],"segments":[{"box_2d":[558,177,604,953],"text":"for the purposes aforesaid Witness our hands the","type":"base"}]},{"box_2d":[595,185,639,706],"segments":[{"box_2d":[595,185,639,706],"text":"twenty fifth day of March 1745","type":"base"}]}],"region_type":"paragraph"},{"box_2d":[638,30,915,477],"lines":[{"box_2d":[640,42,693,444],"segments":[{"box_2d":[640,42,693,444],"text":"Andw Johnston Ten pounds","type":"base"}]},{"box_2d":[680,52,702,237],"segments":[{"box_2d":[680,52,702,237],"text":"pro Jersey -","type":"base"}]},{"box_2d":[693,63,730,472],"segments":[{"box_2d":[693,63,730,472],"text":"John Burnet Five pounds","type":"base"}]},{"box_2d":[725,71,755,401],"segments":[{"box_2d":[725,71,755,401],"text":"Proclamation money","type":"base"}]},{"box_2d":[763,78,803,417],"segments":[{"box_2d":[763,78,803,276],"text":"Chas Read","type":"base"},{"box_2d":[777,269,810,417],"text":"Ten pounds","type":"base"}]},{"box_2d":[803,171,836,368],"segments":[{"box_2d":[803,171,836,368],"text":"procl Money","type":"base"}]},{"box_2d":[834,46,881,429],"segments":[{"box_2d":[834,46,881,313],"text":"John Johnston","type":"base"},{"box_2d":[840,366,876,429],"text":"Ten","type":"base"}]},{"box_2d":[867,43,911,381],"segments":[{"box_2d":[867,43,911,381],"text":"pound pro: money","type":"base"}]}],"region_type":"column"},{"box_2d":[645,447,988,977],"lines":[{"box_2d":[645,461,701,915],"segments":[{"box_2d":[645,461,701,915],"text":"Robt H Morris twenty pounds -","type":"base"}]},{"box_2d":[691,563,725,874],"segments":[{"box_2d":[691,563,725,874],"text":"Proclamation money -","type":"base"}]},{"box_2d":[719,452,765,937],"segments":[{"box_2d":[719,452,765,937],"text":"Jas Alexander Fifty pounds","type":"base"}]},{"box_2d":[757,463,788,932],"segments":[{"box_2d":[757,463,788,932],"text":"proclamation, I have Signed it to","type":"base"}]},{"box_2d":[780,465,810,949],"segments":[{"box_2d":[780,465,810,949],"text":"another paper one being paid other","type":"base"}]},{"box_2d":[805,465,825,529],"segments":[{"box_2d":[805,465,825,529],"text":"void","type":"base"}]},{"box_2d":[825,469,872,920],"segments":[{"box_2d":[825,469,872,920],"text":"Wm Smith Twenty pounds paid","type":"base"}]},{"box_2d":[860,479,909,970],"segments":[{"box_2d":[860,479,909,970],"text":"Jos: Murray Twenty pounds","type":"base"}]},{"box_2d":[894,524,914,597],"segments":[{"box_2d":[894,524,914,597],"text":"proc","type":"base"}]},{"box_2d":[912,513,953,946],"segments":[{"box_2d":[912,513,953,946],"text":"J: McCall twenty pounds proc","type":"base"}]},{"box_2d":[946,477,981,960],"segments":[{"box_2d":[946,477,981,960],"text":"Abraham Lodge twenty pounds","type":"base"}]},{"box_2d":[973,508,987,656],"segments":[{"box_2d":[973,508,987,656],"text":"proc money","type":"base"}]}],"region_type":"column"}];
+        
+        // Eval Data from Prompt
+        const ev = [{"box_2d":[46,168,645,975],"lines":[{"box_2d":[46,168,80,972],"line_number":1,"segments":[{"text":"Whereas there is a purpose of Erecting a Collegiate","type":"base"}]},{"box_2d":[80,175,110,968],"line_number":2,"segments":[{"text":"School in the province of New Jersey for the instruc","type":"base"}]},{"box_2d":[110,180,138,940],"line_number":3,"segments":[{"text":"ting of youth in the learned Languages liberal","type":"base"}]},{"box_2d":[138,180,166,942],"line_number":4,"segments":[{"text":"arts and Sciences We the subscribers in order to","type":"base"}]},{"box_2d":[166,178,194,928],"line_number":5,"segments":[{"text":"encourage the same and to promote the said","type":"base"}]},{"box_2d":[194,178,224,966],"line_number":6,"segments":[{"text":"undertaking do hereby promise to pay the several","type":"base"}]},{"box_2d":[224,175,254,974],"line_number":7,"segments":[{"text":"sums affixed to our names at or before the first day","type":"base"}]},{"box_2d":[254,178,283,965],"line_number":8,"segments":[{"text":"of June next ensuing the date hereof unto Robert","type":"base"}]},{"box_2d":[283,176,312,928],"line_number":9,"segments":[{"text":"Hunter Morris and Andrew Johnston Esqrs of","type":"base"}]},{"box_2d":[312,180,342,940],"line_number":10,"segments":[{"text":"New Jersey or to James Alexander and William","type":"base"}]},{"box_2d":[342,178,372,962],"line_number":11,"segments":[{"text":"Smith Esqrs of New York or to either of the said per=","type":"base"}]},{"box_2d":[372,180,402,974],"line_number":12,"segments":[{"text":"sons and as it only intended to apply the interest","type":"base"}]},{"box_2d":[402,180,432,938],"line_number":13,"segments":[{"text":"of the moneys to be subscribed for the purposes","type":"base"}]},{"box_2d":[432,176,462,972],"line_number":14,"segments":[{"text":"aforesaid the Subscribers are to be at Liberty either","type":"base"}]},{"box_2d":[462,180,492,962],"line_number":15,"segments":[{"text":"to keep the money subscribed in their own hands","type":"base"}]},{"box_2d":[492,178,522,944],"line_number":16,"segments":[{"text":"and to pay the Interest after the said first day","type":"base"}]},{"box_2d":[522,180,552,968],"line_number":17,"segments":[{"text":"of June yearly or to pay in the principals subscribed","type":"base"}]},{"box_2d":[552,180,582,962],"line_number":18,"segments":[{"text":"when they please in order to be put out to interest","type":"base"}]},{"box_2d":[582,180,612,948],"line_number":19,"segments":[{"text":"for the purposes aforesaid Witness our hands the","type":"base"}]},{"box_2d":[612,180,645,695],"line_number":20,"segments":[{"text":"twenty fifth day of March 1745","type":"base"}]}],"region_type":"paragraph"},{"box_2d":[642,32,915,465],"lines":[{"box_2d":[642,35,680,445],"line_number":21,"segments":[{"text":"Andw Johnston Ten pounds","type":"base"}]},{"box_2d":[675,45,700,250],"line_number":22,"segments":[{"text":"pro Currency -","type":"base"}]},{"box_2d":[695,65,735,465],"line_number":23,"segments":[{"text":"John Burnet five pounds","type":"base"}]},{"box_2d":[735,70,760,398],"line_number":24,"segments":[{"text":"Proclamation money","type":"base"}]},{"box_2d":[750,78,800,420],"line_number":25,"segments":[{"text":"Chas Read","type":"base"},{"text":" Ten pounds","type":"base"}]},{"box_2d":[800,175,835,368],"line_number":26,"segments":[{"text":"procl Money","type":"base"}]},{"box_2d":[835,45,880,428],"line_number":27,"segments":[{"text":"John Johnston","type":"base"},{"text":" Ten","type":"base"}]},{"box_2d":[880,32,915,365],"line_number":28,"segments":[{"text":"pound pro: money","type":"base"}]}],"region_type":"column"},{"box_2d":[640,450,990,970],"lines":[{"box_2d":[640,465,695,915],"line_number":21,"segments":[{"text":"Robt H Morris","type":"base"},{"text":" twenty pounds -","type":"base"}]},{"box_2d":[690,572,715,865],"line_number":22,"segments":[{"text":"Proclamation money -","type":"base"}]},{"box_2d":[710,450,750,935],"line_number":23,"segments":[{"text":"Jas Alexander fifty pounds","type":"base"}]},{"box_2d":[750,460,775,925],"line_number":24,"segments":[{"text":"proclamation, I have Signed it to","type":"base"}]},{"box_2d":[775,460,800,948],"line_number":25,"segments":[{"text":"another paper one being paid other","type":"base"}]},{"box_2d":[800,462,820,520],"line_number":26,"segments":[{"text":"void","type":"base"}]},{"box_2d":[820,470,860,945],"line_number":27,"segments":[{"text":"Wm Smith Twenty pounds paid","type":"base"}]},{"box_2d":[860,475,900,970],"line_number":28,"segments":[{"text":"Jos: Murray","type":"base"},{"text":" twenty pounds","type":"base"}]},{"box_2d":[900,530,915,605],"line_number":29,"segments":[{"text":"procl","type":"base"}]},{"box_2d":[910,510,945,942],"line_number":30,"segments":[{"text":"M: Callo twenty pounds proc","type":"base"}]},{"box_2d":[940,475,975,960],"line_number":31,"segments":[{"text":"Abraham Lodge twenty pounds","type":"base"}]},{"box_2d":[975,510,990,655],"line_number":32,"segments":[{"text":"proc money","type":"base"}]}],"region_type":"column"}];
+
+        document.getElementById('input-gt').value = JSON.stringify(gt, null, 2);
+        document.getElementById('input-eval').value = JSON.stringify(ev, null, 2);
+        document.getElementById('input-url').value = "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a2/Shakespeare_First_Folio_1623_Title_Page.jpg/800px-Shakespeare_First_Folio_1623_Title_Page.jpg";
+    }
+</script>
+</body>
+</html>
