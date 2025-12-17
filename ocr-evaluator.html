@@ -28,7 +28,6 @@
             overflow: hidden;
         }
 
-        /* --- HEADER --- */
         .app-header {
             padding: 10px 20px;
             background: white;
@@ -40,7 +39,6 @@
             height: 50px;
         }
 
-        /* --- MAIN LAYOUT --- */
         .main-workspace {
             display: flex;
             flex: 1;
@@ -56,7 +54,6 @@
             position: relative;
         }
 
-        /* --- VISUALIZER --- */
         .viz-panel {
             flex: 1;
             background: #e5e5e5;
@@ -94,7 +91,6 @@
         .source-image { display: block; width: 100%; height: auto; }
         .box-layer { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
 
-        /* BOX STYLES */
         .bbox {
             position: absolute;
             border: 2px solid;
@@ -107,7 +103,6 @@
         .bbox-gt { border-color: #22c55e; background: rgba(34, 197, 94, 0.1); }
         .bbox-eval { border-color: #ef4444; background: rgba(239, 68, 68, 0.1); }
 
-        /* --- SIDEBAR --- */
         .sidebar-panel {
             width: var(--sidebar-width);
             background: white;
@@ -136,7 +131,6 @@
         .comp-lbl { font-size: 10px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; }
         .comp-txt { font-family: Georgia, serif; line-height: 1.3; margin-top: 2px; overflow-wrap: break-word; }
 
-        /* --- DETAIL PANEL --- */
         .detail-panel {
             height: var(--detail-height);
             background: white;
@@ -172,9 +166,10 @@
 
         .compare-row {
             display: grid;
-            grid-template-columns: 80px minmax(0, 2fr) minmax(0, 1fr);
+            grid-template-columns: 80px minmax(0, 3fr) minmax(300px, 2fr);
             border-bottom: 1px solid var(--border-color);
             overflow: hidden;
+            height: 100%; 
         }
         
         .row-label {
@@ -190,6 +185,8 @@
             border-right: 1px solid var(--border-color);
             color: var(--text-secondary);
             letter-spacing: 1px;
+            text-align: center;
+            padding: 4px;
         }
         .lbl-gt { color: var(--success-color); background: #f0fdf4; }
         .lbl-ev { color: var(--danger-color); background: #fef2f2; }
@@ -200,16 +197,19 @@
             background-size: 20px 20px;
             padding: 10px;
             border-right: 1px solid var(--border-color);
-            overflow-x: auto;
-            overflow-y: hidden;
             display: flex;
             align-items: center;
+            justify-content: center;
+            overflow: hidden; 
+            position: relative;
         }
         
         .cutout-canvas {
-            height: 100%; 
-            width: auto; 
-            max-width: none; 
+            max-width: 100%;
+            max-height: 100%;
+            width: auto;
+            height: auto;
+            object-fit: contain;
             border: 1px solid rgba(255,255,255,0.3);
             background: white;
         }
@@ -221,9 +221,8 @@
             font-size: 18px;
             line-height: 1.5;
             display: block; 
-            word-break: break-all; 
-            overflow-wrap: anywhere;
-            white-space: pre-wrap;
+            word-break: break-word; 
+            white-space: pre-wrap; 
         }
 
         .diff-add { background-color: #bbf7d0; color: #166534; }
@@ -238,20 +237,67 @@
         .input-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; flex: 1; }
         textarea { width: 100%; height: 100%; border: 1px solid #ccc; font-family: monospace; resize: none; padding: 10px; }
         .btn-primary { background: var(--primary-color); color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; }
+        .btn-secondary { background: white; color: var(--text-secondary); border: 1px solid var(--border-color); padding: 8px 15px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+        .btn-secondary:hover { background: #f1f5f9; }
+        .label-input { padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 12px; }
+
+        [data-tooltip] {
+            position: relative;
+            cursor: help;
+            border-bottom: 1px dotted currentColor;
+        }
+        [data-tooltip]:hover::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            margin-bottom: 8px;
+            padding: 8px 12px;
+            background: #1e293b;
+            color: white;
+            font-size: 11px;
+            white-space: nowrap;
+            border-radius: 6px;
+            z-index: 10000;
+            pointer-events: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        [data-tooltip]:hover::before {
+            content: '';
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            margin-bottom: 2px;
+            border: 6px solid transparent;
+            border-top-color: #1e293b;
+            z-index: 10000;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body>
 
 <div id="setup-modal" class="modal-overlay">
     <div class="input-card">
-        <h2 style="margin:0;">Load OCR Data</h2>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h2 style="margin:0;">Load OCR Data</h2>
+            <button class="btn-secondary" onclick="generateShareLink()">🔗 Copy Share Link</button>
+        </div>
+        
+        <p style="margin:0; font-size:12px; color:#64748b;">Paste Raw JSON <strong>OR</strong> a "Gemini Viewer" URL into the boxes below.</p>
+        
         <div style="display:flex; gap:10px;">
-            <input type="text" id="input-url" style="flex:1; padding:10px; border:1px solid #ccc; border-radius:4px;" placeholder="Image URL">
-            <button class="btn-primary" onclick="loadPlaceholder()">Use Sample</button>
+            <input type="text" id="input-url" style="flex:1; padding:10px; border:1px solid #ccc; border-radius:4px;" placeholder="Image URL (Optional)">
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
+            <input type="text" id="label-gt" class="label-input" placeholder="Label for View 1 (e.g. Ground Truth)">
+            <input type="text" id="label-ev" class="label-input" placeholder="Label for View 2 (e.g. Generated)">
         </div>
         <div class="input-grid">
-            <textarea id="input-gt" placeholder="Ground Truth JSON..."></textarea>
-            <textarea id="input-eval" placeholder="Evaluation JSON..."></textarea>
+            <textarea id="input-gt" placeholder="Ground Truth: Paste JSON or Viewer URL..."></textarea>
+            <textarea id="input-eval" placeholder="Evaluation: Paste JSON or Viewer URL..."></textarea>
         </div>
         <div style="text-align: right;">
             <button class="btn-primary" onclick="initializeViewer()">Visualize</button>
@@ -261,11 +307,25 @@
 
 <div class="app-header">
     <h3 style="margin:0;">OCR Evaluator (Line Mode)</h3>
-    <div style="display:flex; gap:20px; font-size:12px; color:#64748b;">
-        <span>CER: <b id="m-cer" style="color:black; font-size:14px;">-</b></span>
-        <span>Avg IoU: <b id="m-iou" style="color:black; font-size:14px;">-</b></span>
+    <div style="display:flex; gap:20px; font-size:11px; color:#64748b; flex-wrap:wrap; align-items:center;">
+        <span data-tooltip="Character Error Rate: percentage of character-level edits needed">CER: <b id="m-cer" style="color:black; font-size:13px;">-</b></span>
+        <span data-tooltip="Word Error Rate: percentage of word-level edits needed">WER: <b id="m-wer" style="color:black; font-size:13px;">-</b></span>
+        <span data-tooltip="Intersection over Union: overlap between boxes (0=none, 1=perfect)">Avg IoU: <b id="m-iou" style="color:black; font-size:13px;">-</b></span>
+        <span style="border-left:1px solid #cbd5e1; padding-left:20px;" data-tooltip="Ratio of correctly detected lines to all detected lines">Precision: <b id="m-precision" style="color:black; font-size:13px;">-</b></span>
+        <span data-tooltip="Ratio of correctly detected lines to all ground truth lines">Recall: <b id="m-recall" style="color:black; font-size:13px;">-</b></span>
+        <span data-tooltip="Harmonic mean of precision and recall">F1: <b id="m-f1" style="color:black; font-size:13px;">-</b></span>
+        <span style="border-left:1px solid #cbd5e1; padding-left:20px;" data-tooltip="Number of successfully matched lines">Matched: <b id="m-matches" style="color:black; font-size:13px;">-</b></span>
+        <span data-tooltip="Ground truth lines not found in evaluation">Missing: <b id="m-missing" style="color:#ef4444; font-size:13px;">-</b></span>
+        <span data-tooltip="Evaluation lines not matched to ground truth">Extra: <b id="m-extra" style="color:#f59e0b; font-size:13px;">-</b></span>
+        <label style="border-left:1px solid #cbd5e1; padding-left:20px; cursor:pointer; user-select:none;" data-tooltip="Ignore letter case when comparing text">
+            <input type="checkbox" id="case-insensitive-toggle" onchange="toggleCaseInsensitive()" style="margin-right:4px;">
+            Case Insensitive
+        </label>
     </div>
-    <button onclick="document.getElementById('setup-modal').style.display='flex'" style="padding:6px 12px; cursor:pointer;">New Load</button>
+    <div style="display:flex; gap:10px;">
+        <button onclick="generateShareLink()" style="padding:6px 12px; cursor:pointer;">Share</button>
+        <button onclick="document.getElementById('setup-modal').style.display='flex'" style="padding:6px 12px; cursor:pointer;">New Load</button>
+    </div>
 </div>
 
 <div class="main-workspace">
@@ -286,15 +346,16 @@
         <div class="detail-panel" id="detail-panel">
             <div class="detail-header">
                 <div class="detail-stats">
-                    <span>Line IoU: <span id="focus-iou" class="stat-val">-</span></span>
-                    <span>Line CER: <span id="focus-cer" class="stat-val">-</span></span>
+                    <span data-tooltip="Intersection over Union: overlap between boxes (0=none, 1=perfect)">Line IoU: <span id="focus-iou" class="stat-val">-</span></span>
+                    <span data-tooltip="Character Error Rate: percentage of character-level edits needed">Line CER: <span id="focus-cer" class="stat-val">-</span></span>
+                    <span data-tooltip="Word Error Rate: percentage of word-level edits needed">Line WER: <span id="focus-wer" class="stat-val">-</span></span>
                 </div>
                 <button onclick="closeDetail()" style="background:none; border:none; font-size:24px; cursor:pointer; line-height:1;">&times;</button>
             </div>
             
             <div class="detail-grid">
                 <div class="compare-row">
-                    <div class="row-label lbl-gt">Ground Truth</div>
+                    <div class="row-label lbl-gt" id="display-label-gt">Ground Truth</div>
                     <div class="cutout-area">
                         <canvas id="canvas-gt" class="cutout-canvas"></canvas>
                     </div>
@@ -302,7 +363,7 @@
                 </div>
 
                 <div class="compare-row" style="border-bottom:none;">
-                    <div class="row-label lbl-ev">Generated</div>
+                    <div class="row-label lbl-ev" id="display-label-ev">Generated</div>
                     <div class="cutout-area">
                         <canvas id="canvas-ev" class="cutout-canvas"></canvas>
                     </div>
@@ -321,37 +382,55 @@
 </div>
 
 <script>
-    // --- STATE ---
     let globalData = [];
     let nativeImgWidth = 0;
     let nativeImgHeight = 0;
+    let caseInsensitive = false;
+    let rawGtData = null;
+    let rawEvData = null;
     
-    // --- SETUP ---
     function initializeViewer() {
-        const url = document.getElementById('input-url').value;
-        const gtStr = document.getElementById('input-gt').value;
-        const evStr = document.getElementById('input-eval').value;
+        const rawGt = document.getElementById('input-gt').value.trim();
+        const rawEv = document.getElementById('input-eval').value.trim();
+        const manualUrl = document.getElementById('input-url').value.trim();
+        const labelGt = document.getElementById('label-gt').value.trim() || "Ground Truth";
+        const labelEv = document.getElementById('label-ev').value.trim() || "Generated";
         
+        let gtData = null, evData = null;
+        let derivedImgUrl = "";
+
+        document.getElementById('display-label-gt').innerText = labelGt;
+        document.getElementById('display-label-ev').innerText = labelEv;
+
         try {
-            const gt = JSON.parse(gtStr);
-            const ev = JSON.parse(evStr);
-            processData(gt, ev);
-        } catch(e) { 
+            const parsedGt = parseInput(rawGt);
+            gtData = parsedGt.data;
+            if(parsedGt.img) derivedImgUrl = parsedGt.img;
+
+            const parsedEv = parseInput(rawEv);
+            evData = parsedEv.data;
+            if(!derivedImgUrl && parsedEv.img) derivedImgUrl = parsedEv.img;
+        } catch(e) {
             console.error(e);
-            return alert("Invalid JSON"); 
+            return alert("Error parsing inputs: " + e.message);
         }
 
+        if(!gtData || !evData) return alert("Missing Data");
+
+        const finalUrl = manualUrl || derivedImgUrl;
+        processData(gtData, evData);
+
         const img = document.getElementById('main-image');
-        if(url) {
+        if(finalUrl) {
             img.onload = () => {
                 nativeImgWidth = img.naturalWidth;
                 nativeImgHeight = img.naturalHeight;
                 setZoom(100);
                 document.getElementById('setup-modal').style.display = 'none';
             };
-            img.src = url;
+            img.src = finalUrl;
+            if(!manualUrl) document.getElementById('input-url').value = finalUrl;
         } else {
-            // No Image Mode
             nativeImgWidth = 1000; nativeImgHeight = 1000;
             img.style.display = 'none';
             document.getElementById('img-wrapper').style.height = "1000px";
@@ -361,18 +440,94 @@
         }
     }
 
-    // --- LOGIC ---
+    function parseInput(inputStr) {
+        if(!inputStr) return { data: null, img: null };
+        if(inputStr.includes('#') && inputStr.includes('base64=')) {
+            try {
+                const hashPart = inputStr.split('#')[1];
+                const params = new URLSearchParams(hashPart);
+                const base64Str = params.get('base64');
+                const imgStr = params.get('img');
+                if(base64Str) {
+                    const jsonStr = decodeURIComponent(escape(atob(base64Str)));
+                    return { data: JSON.parse(jsonStr), img: imgStr || null };
+                }
+            } catch(e) { console.warn("Failed to parse URL, trying JSON...", e); }
+        }
+        return { data: JSON.parse(inputStr), img: null };
+    }
+
+    function generateShareLink() {
+        const gtVal = document.getElementById('input-gt').value.trim();
+        const evVal = document.getElementById('input-eval').value.trim();
+        const urlVal = document.getElementById('input-url').value.trim();
+        const lgtVal = document.getElementById('label-gt').value.trim();
+        const levVal = document.getElementById('label-ev').value.trim();
+
+        if(!gtVal || !evVal) return alert("Please fill in GT and Eval data first.");
+
+        try {
+            const state = {
+                gt: btoa(unescape(encodeURIComponent(gtVal))),
+                ev: btoa(unescape(encodeURIComponent(evVal))),
+                img: urlVal ? btoa(unescape(encodeURIComponent(urlVal))) : "",
+                lgt: btoa(unescape(encodeURIComponent(lgtVal))),
+                lev: btoa(unescape(encodeURIComponent(levVal)))
+            };
+
+            const baseUrl = window.location.protocol + '//' + window.location.host + window.location.pathname;
+            const hash = `state_gt=${encodeURIComponent(state.gt)}&state_ev=${encodeURIComponent(state.ev)}&state_img=${encodeURIComponent(state.img)}&state_lgt=${encodeURIComponent(state.lgt)}&state_lev=${encodeURIComponent(state.lev)}`;
+            const fullUrl = `${baseUrl}#${hash}`;
+
+            navigator.clipboard.writeText(fullUrl).then(() => {
+                alert("Link copied!");
+            });
+        } catch(e) {
+            alert("Error generating link: " + e.message);
+        }
+    }
+
+    function checkIncomingShare() {
+        const hash = window.location.hash.substring(1);
+        if(!hash) return;
+        
+        const params = new URLSearchParams(hash);
+        if(params.has('state_gt') && params.has('state_ev')) {
+            try {
+                const gt = decodeURIComponent(escape(atob(params.get('state_gt'))));
+                const ev = decodeURIComponent(escape(atob(params.get('state_ev'))));
+                const img = params.has('state_img') && params.get('state_img') 
+                    ? decodeURIComponent(escape(atob(params.get('state_img')))) 
+                    : "";
+                const lgt = params.has('state_lgt') ? decodeURIComponent(escape(atob(params.get('state_lgt')))) : "";
+                const lev = params.has('state_lev') ? decodeURIComponent(escape(atob(params.get('state_lev')))) : "";
+
+                document.getElementById('input-gt').value = gt;
+                document.getElementById('input-eval').value = ev;
+                document.getElementById('input-url').value = img;
+                document.getElementById('label-gt').value = lgt;
+                document.getElementById('label-ev').value = lev;
+
+                setTimeout(initializeViewer, 500);
+            } catch(e) {
+                console.error("Failed to load shared state", e);
+            }
+        }
+    }
+
+    window.addEventListener('load', checkIncomingShare);
+
+    let globalMetrics = {};
+
     function processData(gtRaw, evRaw) {
-        // Flatten now targets LINES, not segments
+        rawGtData = gtRaw;
+        rawEvData = evRaw;
         const gtList = flatten(gtRaw);
         const evList = flatten(evRaw);
-
-        // Global Metrics
         const fullGt = gtList.map(x=>x.text).join(' ');
         const fullEv = evList.map(x=>x.text).join(' ');
-        const cer = calcLevenshteinRate(fullGt, fullEv);
-
-        // Alignment (Greedy IoU)
+        const cer = calcLevenshteinRate(fullGt, fullEv, caseInsensitive);
+        const wer = calcWordErrorRate(fullGt, fullEv, caseInsensitive);
         globalData = [];
         let pool = [...evList];
         let matches = 0, totalIoU = 0;
@@ -385,7 +540,7 @@
             });
 
             let match = null;
-            if(bestScore > 0.01) { // Threshold
+            if(bestScore > 0.01) {
                 match = pool[bestIdx];
                 pool.splice(bestIdx, 1);
                 matches++;
@@ -394,12 +549,31 @@
             globalData.push({ gt: g, ev: match, iou: bestScore, id: Math.random().toString(36).substr(2,9) });
         });
 
-        // Add hallucinations
+        const extraLines = pool.length;
         pool.forEach(e => globalData.push({ gt: null, ev: e, iou: 0, id: Math.random().toString(36).substr(2,9) }));
 
-        // UI
+        const missingLines = gtList.length - matches;
+        const precision = evList.length > 0 ? (matches / evList.length) : 0;
+        const recall = gtList.length > 0 ? (matches / gtList.length) : 0;
+        const f1 = (precision + recall) > 0 ? (2 * precision * recall) / (precision + recall) : 0;
+
+        globalMetrics = {
+            cer, wer, matches, missingLines, extraLines,
+            avgIoU: matches ? (totalIoU/matches) : 0,
+            precision, recall, f1,
+            totalGt: gtList.length,
+            totalEv: evList.length
+        };
+
         document.getElementById('m-cer').innerText = cer + '%';
-        document.getElementById('m-iou').innerText = matches ? (totalIoU/matches).toFixed(2) : '0';
+        document.getElementById('m-wer').innerText = wer + '%';
+        document.getElementById('m-iou').innerText = globalMetrics.avgIoU.toFixed(2);
+        document.getElementById('m-precision').innerText = (precision * 100).toFixed(1) + '%';
+        document.getElementById('m-recall').innerText = (recall * 100).toFixed(1) + '%';
+        document.getElementById('m-f1').innerText = f1.toFixed(3);
+        document.getElementById('m-matches').innerText = matches;
+        document.getElementById('m-missing').innerText = missingLines;
+        document.getElementById('m-extra').innerText = extraLines;
         renderSidebar();
         renderBoxes();
     }
@@ -407,13 +581,15 @@
     function renderSidebar() {
         const con = document.getElementById('sidebar-list');
         con.innerHTML = '';
+        const lgt = document.getElementById('label-gt').value.trim() || "GT";
+        const lev = document.getElementById('label-ev').value.trim() || "EV";
+
         globalData.forEach(item => {
             const card = document.createElement('div');
             card.className = 'comp-card';
             card.id = `card-${item.id}`;
             card.onclick = () => activateItem(item.id);
             
-            // Status
             let status = `<span class="tag-mismatch">MISSING</span>`;
             if(item.gt && item.ev) {
                 status = (item.gt.text === item.ev.text) 
@@ -427,11 +603,11 @@
                     ${status}
                 </div>
                 <div class="comp-row">
-                    <div class="comp-lbl">GT</div>
+                    <div class="comp-lbl">${esc(lgt)}</div>
                     <div class="comp-txt">${item.gt ? esc(item.gt.text.substring(0,50)) : '--'}</div>
                 </div>
                 <div class="comp-row">
-                    <div class="comp-lbl">EV</div>
+                    <div class="comp-lbl">${esc(lev)}</div>
                     <div class="comp-txt">${item.ev ? esc(item.ev.text.substring(0,50)) : '--'}</div>
                 </div>
             `;
@@ -452,8 +628,6 @@
         if(!box || box.length < 4) return;
         const div = document.createElement('div');
         div.className = `bbox ${cls} box-${id}`;
-        // Assuming box is [y, x, h, w] or [y_min, x_min, y_max, x_max] normalized to 1000
-        // Based on JSON: 46,172,87,981 (y, x, y_max, x_max)
         div.style.top = (box[0]/10) + '%';
         div.style.left = (box[1]/10) + '%';
         div.style.height = ((box[2]-box[0])/10) + '%';
@@ -462,37 +636,27 @@
         con.appendChild(div);
     }
 
-    // --- INTERACTION ---
     function activateItem(id) {
-        // Highlight
         document.querySelectorAll('.bbox').forEach(b => b.classList.remove('active'));
         document.querySelectorAll('.comp-card').forEach(c => c.classList.remove('active'));
-        
         document.querySelectorAll(`.box-${id}`).forEach(b => b.classList.add('active'));
         const card = document.getElementById(`card-${id}`);
         if(card) {
             card.classList.add('active');
             card.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
-
-        // Auto Scroll Main View
         const item = globalData.find(x => x.id === id);
         if(item) {
             const box = item.gt ? item.gt.box : item.ev.box;
             const wrap = document.getElementById('img-wrapper');
             const con = document.getElementById('main-canvas-container');
-            
-            // Box center in px
             const cx = ((box[1] + (box[3]-box[1])/2) / 1000) * wrap.offsetWidth;
             const cy = ((box[0] + (box[2]-box[0])/2) / 1000) * wrap.offsetHeight;
-
             con.scrollTo({
                 left: cx - con.clientWidth/2,
                 top: cy - con.clientHeight/2,
                 behavior: 'smooth'
             });
-
-            // Update Detail Panel
             updateDetailPanel(item);
         }
     }
@@ -500,93 +664,60 @@
     function updateDetailPanel(item) {
         const panel = document.getElementById('detail-panel');
         const img = document.getElementById('main-image');
-        
-        // 1. Stats
         const gtTxt = item.gt ? item.gt.text : "";
         const evTxt = item.ev ? item.ev.text : "";
-        const localCer = calcLevenshteinRate(gtTxt, evTxt);
-        
+        const localCer = calcLevenshteinRate(gtTxt, evTxt, caseInsensitive);
+        const localWer = calcWordErrorRate(gtTxt, evTxt, caseInsensitive);
         document.getElementById('focus-iou').innerText = (item.iou * 100).toFixed(1) + '%';
         document.getElementById('focus-cer').innerText = localCer + '%';
-        
-        // 2. Draw Canvases (Cutouts)
+        document.getElementById('focus-wer').innerText = localWer + '%';
         drawCutout('canvas-gt', item.gt ? item.gt.box : null, img);
         drawCutout('canvas-ev', item.ev ? item.ev.box : null, img);
-
-        // 3. Text Diffing
         document.getElementById('text-gt').innerHTML = item.gt ? esc(item.gt.text) : '<span style="color:#ccc; font-style:italic;">Missing</span>';
-        document.getElementById('text-ev').innerHTML = diffText(gtTxt, evTxt);
-
+        document.getElementById('text-ev').innerHTML = diffTextBetter(gtTxt, evTxt);
         panel.classList.add('visible');
     }
 
     function drawCutout(canvasId, box, imgEl) {
         const canvas = document.getElementById(canvasId);
         const ctx = canvas.getContext('2d');
-        
         if(!box || !imgEl.src) {
             ctx.clearRect(0,0,canvas.width,canvas.height);
             canvas.style.width = '0px';
             return;
         }
-
         const dpr = window.devicePixelRatio || 1;
-
-        // Box is 0-1000 relative
         const x = (box[1]/1000) * nativeImgWidth;
         const y = (box[0]/1000) * nativeImgHeight;
         const w = ((box[3]-box[1])/1000) * nativeImgWidth;
         const h = ((box[2]-box[0])/1000) * nativeImgHeight;
-
-        // Add padding
-        const pad = Math.max(w, h) * 0.02; // 2% padding
-        
+        const pad = Math.max(w, h) * 0.02;
         canvas.width = (w + pad*2) * dpr;
         canvas.height = (h + pad*2) * dpr;
-        
-        // IMPORTANT: Reset style width so it can be handled by CSS
         canvas.style.width = ''; 
-
         ctx.scale(dpr, dpr);
         ctx.fillStyle = "#fff";
         ctx.fillRect(0,0, w+pad*2, h+pad*2);
-        
-        try {
-            ctx.drawImage(imgEl, x, y, w, h, pad, pad, w, h);
-        } catch(e) { console.error("Canvas draw error", e); }
+        try { ctx.drawImage(imgEl, x, y, w, h, pad, pad, w, h); } catch(e) { console.error(e); }
     }
 
-    function closeDetail() {
-        document.getElementById('detail-panel').classList.remove('visible');
-    }
+    function closeDetail() { document.getElementById('detail-panel').classList.remove('visible'); }
 
-    // --- UTILS ---
     function setZoom(v) {
         document.getElementById('img-wrapper').style.width = (nativeImgWidth ? (nativeImgWidth*(v/100)) : (800*(v/100))) + 'px';
         document.getElementById('zoom-disp').innerText = v + '%';
     }
 
-    // UPDATED: Now flattens based on Lines, ignoring segment boxes
     function flatten(json) {
         let arr = [];
         if(!Array.isArray(json)) return arr;
-        
         json.forEach(reg => {
             if(reg.lines) {
                 reg.lines.forEach(line => {
-                    // Use LINE box
                     const lineBox = line.box_2d;
-                    
-                    // Aggregate Segment Text
                     let fullText = "";
-                    if(line.segments) {
-                        // Use join('') because evaluation segments sometimes contain leading spaces
-                        fullText = line.segments.map(s => s.text).join(""); 
-                    }
-                    
-                    if(lineBox && lineBox.length === 4) {
-                        arr.push({ text: fullText, box: lineBox });
-                    }
+                    if(line.segments) fullText = line.segments.map(s => s.text).join(""); 
+                    if(lineBox && lineBox.length === 4) arr.push({ text: fullText, box: lineBox });
                 });
             }
         });
@@ -600,9 +731,10 @@
         return inter/(areaA+areaB-inter);
     }
 
-    function calcLevenshteinRate(a, b) {
+    function calcLevenshteinRate(a, b, ignoreCase = false) {
         if(!a || !a.length) return 0;
         if(!b) b="";
+        if(ignoreCase) { a = a.toLowerCase(); b = b.toLowerCase(); }
         const m = [];
         for(let i=0; i<=b.length; i++){ m[i]=[i]; if(i===0) for(let j=0; j<=a.length; j++) m[0][j]=j; }
         for(let i=1; i<=b.length; i++){
@@ -614,40 +746,66 @@
         return ((m[b.length][a.length] / a.length) * 100).toFixed(2);
     }
 
-    function diffText(gt, ev) {
-        if(!gt) return `<span class="diff-add">${esc(ev)}</span>`;
-        if(!ev) return `<span class="diff-del">${esc(gt)}</span>`;
-        if(gt === ev) return `<span class="diff-equal">${esc(ev)}</span>`;
-
-        let html = "";
-        let i=0, j=0;
-        while(i<gt.length && j<ev.length) {
-            if(gt[i] === ev[j]) {
-                html += `<span class="diff-equal">${esc(gt[i])}</span>`;
-                i++; j++;
-            } else {
-                html += `<span class="diff-del">${esc(gt[i])}</span>`;
-                html += `<span class="diff-add">${esc(ev[j])}</span>`;
-                i++; j++;
+    function calcWordErrorRate(a, b, ignoreCase = false) {
+        if(!a || !a.length) return 0;
+        if(ignoreCase) { a = a.toLowerCase(); b = b ? b.toLowerCase() : ""; }
+        const wordsA = a.trim().split(/\s+/).filter(w => w.length > 0);
+        const wordsB = b ? b.trim().split(/\s+/).filter(w => w.length > 0) : [];
+        if(wordsA.length === 0) return 0;
+        const m = [];
+        for(let i=0; i<=wordsB.length; i++){ m[i]=[i]; if(i===0) for(let j=0; j<=wordsA.length; j++) m[0][j]=j; }
+        for(let i=1; i<=wordsB.length; i++){
+            for(let j=1; j<=wordsA.length; j++){
+                if(wordsB[i-1]===wordsA[j-1]) m[i][j] = m[i-1][j-1];
+                else m[i][j] = Math.min(m[i-1][j-1]+1, m[i][j-1]+1, m[i-1][j]+1);
             }
         }
-        if(i < gt.length) html += `<span class="diff-del">${esc(gt.substring(i))}</span>`;
-        if(j < ev.length) html += `<span class="diff-add">${esc(ev.substring(j))}</span>`;
-        return html;
+        return ((m[wordsB.length][wordsA.length] / wordsA.length) * 100).toFixed(2);
+    }
+
+    function diffTextBetter(text1, text2) {
+        if (!text1) return `<span class="diff-add">${esc(text2)}</span>`;
+        if (!text2) return `<span class="diff-del">${esc(text1)}</span>`;
+        if (text1 === text2) return `<span class="diff-equal">${esc(text1)}</span>`;
+        const m = text1.length, n = text2.length;
+        const dp = Array(m + 1).fill(0).map(() => Array(n + 1).fill(0));
+        for (let i = 1; i <= m; i++) {
+            for (let j = 1; j <= n; j++) {
+                if (text1[i - 1] === text2[j - 1]) dp[i][j] = dp[i - 1][j - 1] + 1;
+                else dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+            }
+        }
+        let html = "";
+        let i = m, j = n;
+        const result = [];
+        while (i > 0 || j > 0) {
+            if (i > 0 && j > 0 && text1[i - 1] === text2[j - 1]) {
+                result.push(`<span class="diff-equal">${esc(text1[i - 1])}</span>`);
+                i--; j--;
+            } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+                result.push(`<span class="diff-add">${esc(text2[j - 1])}</span>`);
+                j--;
+            } else {
+                result.push(`<span class="diff-del">${esc(text1[i - 1])}</span>`);
+                i--;
+            }
+        }
+        return result.reverse().join("");
     }
 
     function esc(s) { return s.replace(/&/g,"&amp;").replace(/</g,"&lt;"); }
 
-    function loadPlaceholder() {
-        // GT Data from Prompt
-        const gt = [{"box_2d":[46,172,638,977],"lines":[{"box_2d":[46,169,87,981],"segments":[{"box_2d":[46,169,87,981],"text":"Whereas there is a purpose of Erecting a Collegiate","type":"base"}]},{"box_2d":[85,171,115,983],"segments":[{"box_2d":[85,171,115,983],"text":"School in the province of New Jersey for the instruc","type":"base"}]},{"box_2d":[112,179,142,942],"segments":[{"box_2d":[112,179,142,942],"text":"ting of youth in the learned Languages liberal","type":"base"}]},{"box_2d":[140,182,167,940],"segments":[{"box_2d":[140,182,167,940],"text":"arts and Sciences We the subscribers in order to","type":"base"}]},{"box_2d":[164,175,194,938],"segments":[{"box_2d":[164,175,194,938],"text":"encourage the same and to promote the said +","type":"base"}]},{"box_2d":[188,179,222,966],"segments":[{"box_2d":[188,179,222,966],"text":"undertaking do hereby promise to pay the several","type":"base"}]},{"box_2d":[220,172,252,977],"segments":[{"box_2d":[220,172,252,977],"text":"sums affixed to our names at or before the first day","type":"base"}]},{"box_2d":[247,186,281,984],"segments":[{"box_2d":[247,186,281,984],"text":"of June next ensuing the date hereof unto Robert","type":"base"}]},{"box_2d":[272,182,305,945],"segments":[{"box_2d":[272,182,305,945],"text":"Hunter Morris and Andrew Johnston Esqrs of","type":"base"}]},{"box_2d":[300,175,332,935],"segments":[{"box_2d":[300,175,332,935],"text":"New Jersey or to James Alexander and William","type":"base"}]},{"box_2d":[330,172,362,973],"segments":[{"box_2d":[330,172,362,973],"text":"Smith Esqrs of New York or to either of the said per=","type":"base"}]},{"box_2d":[361,180,393,972],"segments":[{"box_2d":[361,180,393,972],"text":"sons and as it is only intended to apply the interest","type":"base"}]},{"box_2d":[386,174,423,924],"segments":[{"box_2d":[386,174,423,924],"text":"of the moneys to be subscribed for the purposes","type":"base"}]},{"box_2d":[418,175,452,969],"segments":[{"box_2d":[418,175,452,969],"text":"aforesaid the Subscribers are to be at Liberty either","type":"base"}]},{"box_2d":[447,180,484,965],"segments":[{"box_2d":[447,180,484,965],"text":"to keep the money subscribed in their own hands","type":"base"}]},{"box_2d":[478,177,517,953],"segments":[{"box_2d":[478,177,517,953],"text":"and to pay the Interest after the said first day","type":"base"}]},{"box_2d":[504,182,545,969],"segments":[{"box_2d":[504,182,545,969],"text":"of June yearly or to pay in the principals subscribed","type":"base"}]},{"box_2d":[535,177,578,963],"segments":[{"box_2d":[535,177,578,963],"text":"when they please in order to be put out to interest","type":"base"}]},{"box_2d":[558,177,604,953],"segments":[{"box_2d":[558,177,604,953],"text":"for the purposes aforesaid Witness our hands the","type":"base"}]},{"box_2d":[595,185,639,706],"segments":[{"box_2d":[595,185,639,706],"text":"twenty fifth day of March 1745","type":"base"}]}],"region_type":"paragraph"},{"box_2d":[638,30,915,477],"lines":[{"box_2d":[640,42,693,444],"segments":[{"box_2d":[640,42,693,444],"text":"Andw Johnston Ten pounds","type":"base"}]},{"box_2d":[680,52,702,237],"segments":[{"box_2d":[680,52,702,237],"text":"pro Jersey -","type":"base"}]},{"box_2d":[693,63,730,472],"segments":[{"box_2d":[693,63,730,472],"text":"John Burnet Five pounds","type":"base"}]},{"box_2d":[725,71,755,401],"segments":[{"box_2d":[725,71,755,401],"text":"Proclamation money","type":"base"}]},{"box_2d":[763,78,803,417],"segments":[{"box_2d":[763,78,803,276],"text":"Chas Read","type":"base"},{"box_2d":[777,269,810,417],"text":"Ten pounds","type":"base"}]},{"box_2d":[803,171,836,368],"segments":[{"box_2d":[803,171,836,368],"text":"procl Money","type":"base"}]},{"box_2d":[834,46,881,429],"segments":[{"box_2d":[834,46,881,313],"text":"John Johnston","type":"base"},{"box_2d":[840,366,876,429],"text":"Ten","type":"base"}]},{"box_2d":[867,43,911,381],"segments":[{"box_2d":[867,43,911,381],"text":"pound pro: money","type":"base"}]}],"region_type":"column"},{"box_2d":[645,447,988,977],"lines":[{"box_2d":[645,461,701,915],"segments":[{"box_2d":[645,461,701,915],"text":"Robt H Morris twenty pounds -","type":"base"}]},{"box_2d":[691,563,725,874],"segments":[{"box_2d":[691,563,725,874],"text":"Proclamation money -","type":"base"}]},{"box_2d":[719,452,765,937],"segments":[{"box_2d":[719,452,765,937],"text":"Jas Alexander Fifty pounds","type":"base"}]},{"box_2d":[757,463,788,932],"segments":[{"box_2d":[757,463,788,932],"text":"proclamation, I have Signed it to","type":"base"}]},{"box_2d":[780,465,810,949],"segments":[{"box_2d":[780,465,810,949],"text":"another paper one being paid other","type":"base"}]},{"box_2d":[805,465,825,529],"segments":[{"box_2d":[805,465,825,529],"text":"void","type":"base"}]},{"box_2d":[825,469,872,920],"segments":[{"box_2d":[825,469,872,920],"text":"Wm Smith Twenty pounds paid","type":"base"}]},{"box_2d":[860,479,909,970],"segments":[{"box_2d":[860,479,909,970],"text":"Jos: Murray Twenty pounds","type":"base"}]},{"box_2d":[894,524,914,597],"segments":[{"box_2d":[894,524,914,597],"text":"proc","type":"base"}]},{"box_2d":[912,513,953,946],"segments":[{"box_2d":[912,513,953,946],"text":"J: McCall twenty pounds proc","type":"base"}]},{"box_2d":[946,477,981,960],"segments":[{"box_2d":[946,477,981,960],"text":"Abraham Lodge twenty pounds","type":"base"}]},{"box_2d":[973,508,987,656],"segments":[{"box_2d":[973,508,987,656],"text":"proc money","type":"base"}]}],"region_type":"column"}];
-        
-        // Eval Data from Prompt
-        const ev = [{"box_2d":[46,168,645,975],"lines":[{"box_2d":[46,168,80,972],"line_number":1,"segments":[{"text":"Whereas there is a purpose of Erecting a Collegiate","type":"base"}]},{"box_2d":[80,175,110,968],"line_number":2,"segments":[{"text":"School in the province of New Jersey for the instruc","type":"base"}]},{"box_2d":[110,180,138,940],"line_number":3,"segments":[{"text":"ting of youth in the learned Languages liberal","type":"base"}]},{"box_2d":[138,180,166,942],"line_number":4,"segments":[{"text":"arts and Sciences We the subscribers in order to","type":"base"}]},{"box_2d":[166,178,194,928],"line_number":5,"segments":[{"text":"encourage the same and to promote the said","type":"base"}]},{"box_2d":[194,178,224,966],"line_number":6,"segments":[{"text":"undertaking do hereby promise to pay the several","type":"base"}]},{"box_2d":[224,175,254,974],"line_number":7,"segments":[{"text":"sums affixed to our names at or before the first day","type":"base"}]},{"box_2d":[254,178,283,965],"line_number":8,"segments":[{"text":"of June next ensuing the date hereof unto Robert","type":"base"}]},{"box_2d":[283,176,312,928],"line_number":9,"segments":[{"text":"Hunter Morris and Andrew Johnston Esqrs of","type":"base"}]},{"box_2d":[312,180,342,940],"line_number":10,"segments":[{"text":"New Jersey or to James Alexander and William","type":"base"}]},{"box_2d":[342,178,372,962],"line_number":11,"segments":[{"text":"Smith Esqrs of New York or to either of the said per=","type":"base"}]},{"box_2d":[372,180,402,974],"line_number":12,"segments":[{"text":"sons and as it only intended to apply the interest","type":"base"}]},{"box_2d":[402,180,432,938],"line_number":13,"segments":[{"text":"of the moneys to be subscribed for the purposes","type":"base"}]},{"box_2d":[432,176,462,972],"line_number":14,"segments":[{"text":"aforesaid the Subscribers are to be at Liberty either","type":"base"}]},{"box_2d":[462,180,492,962],"line_number":15,"segments":[{"text":"to keep the money subscribed in their own hands","type":"base"}]},{"box_2d":[492,178,522,944],"line_number":16,"segments":[{"text":"and to pay the Interest after the said first day","type":"base"}]},{"box_2d":[522,180,552,968],"line_number":17,"segments":[{"text":"of June yearly or to pay in the principals subscribed","type":"base"}]},{"box_2d":[552,180,582,962],"line_number":18,"segments":[{"text":"when they please in order to be put out to interest","type":"base"}]},{"box_2d":[582,180,612,948],"line_number":19,"segments":[{"text":"for the purposes aforesaid Witness our hands the","type":"base"}]},{"box_2d":[612,180,645,695],"line_number":20,"segments":[{"text":"twenty fifth day of March 1745","type":"base"}]}],"region_type":"paragraph"},{"box_2d":[642,32,915,465],"lines":[{"box_2d":[642,35,680,445],"line_number":21,"segments":[{"text":"Andw Johnston Ten pounds","type":"base"}]},{"box_2d":[675,45,700,250],"line_number":22,"segments":[{"text":"pro Currency -","type":"base"}]},{"box_2d":[695,65,735,465],"line_number":23,"segments":[{"text":"John Burnet five pounds","type":"base"}]},{"box_2d":[735,70,760,398],"line_number":24,"segments":[{"text":"Proclamation money","type":"base"}]},{"box_2d":[750,78,800,420],"line_number":25,"segments":[{"text":"Chas Read","type":"base"},{"text":" Ten pounds","type":"base"}]},{"box_2d":[800,175,835,368],"line_number":26,"segments":[{"text":"procl Money","type":"base"}]},{"box_2d":[835,45,880,428],"line_number":27,"segments":[{"text":"John Johnston","type":"base"},{"text":" Ten","type":"base"}]},{"box_2d":[880,32,915,365],"line_number":28,"segments":[{"text":"pound pro: money","type":"base"}]}],"region_type":"column"},{"box_2d":[640,450,990,970],"lines":[{"box_2d":[640,465,695,915],"line_number":21,"segments":[{"text":"Robt H Morris","type":"base"},{"text":" twenty pounds -","type":"base"}]},{"box_2d":[690,572,715,865],"line_number":22,"segments":[{"text":"Proclamation money -","type":"base"}]},{"box_2d":[710,450,750,935],"line_number":23,"segments":[{"text":"Jas Alexander fifty pounds","type":"base"}]},{"box_2d":[750,460,775,925],"line_number":24,"segments":[{"text":"proclamation, I have Signed it to","type":"base"}]},{"box_2d":[775,460,800,948],"line_number":25,"segments":[{"text":"another paper one being paid other","type":"base"}]},{"box_2d":[800,462,820,520],"line_number":26,"segments":[{"text":"void","type":"base"}]},{"box_2d":[820,470,860,945],"line_number":27,"segments":[{"text":"Wm Smith Twenty pounds paid","type":"base"}]},{"box_2d":[860,475,900,970],"line_number":28,"segments":[{"text":"Jos: Murray","type":"base"},{"text":" twenty pounds","type":"base"}]},{"box_2d":[900,530,915,605],"line_number":29,"segments":[{"text":"procl","type":"base"}]},{"box_2d":[910,510,945,942],"line_number":30,"segments":[{"text":"M: Callo twenty pounds proc","type":"base"}]},{"box_2d":[940,475,975,960],"line_number":31,"segments":[{"text":"Abraham Lodge twenty pounds","type":"base"}]},{"box_2d":[975,510,990,655],"line_number":32,"segments":[{"text":"proc money","type":"base"}]}],"region_type":"column"}];
-
-        document.getElementById('input-gt').value = JSON.stringify(gt, null, 2);
-        document.getElementById('input-eval').value = JSON.stringify(ev, null, 2);
-        document.getElementById('input-url').value = "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a2/Shakespeare_First_Folio_1623_Title_Page.jpg/800px-Shakespeare_First_Folio_1623_Title_Page.jpg";
+    function toggleCaseInsensitive() {
+        caseInsensitive = document.getElementById('case-insensitive-toggle').checked;
+        if(rawGtData && rawEvData) {
+            processData(rawGtData, rawEvData);
+            const activeCard = document.querySelector('.comp-card.active');
+            if(activeCard) {
+                const itemId = activeCard.id.replace('card-', '');
+                const item = globalData.find(x => x.id === itemId);
+                if(item) updateDetailPanel(item);
+            }
+        }
     }
 </script>
 </body>
