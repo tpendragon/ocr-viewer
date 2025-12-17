@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gemini Transcription Viewer</title>
     <style>
-        /* ... [ALL CSS REMAINS EXACTLY THE SAME] ... */
         :root { --primary: #2563eb; --bg-canvas: #e2e8f0; --color-base: #1e293b; --color-del: #ef4444; --color-ins: #2563eb; --color-sub: #f59e0b; --color-note: #8b5cf6; --box-region-border: rgba(37, 99, 235, 0.2); --box-segment-active: rgba(255, 230, 0, 0.25); --box-segment-border-active: #facc15; }
         * { box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; height: 100vh; display: flex; flex-direction: column; background-color: #f1f5f9; overflow: hidden; }
@@ -106,7 +105,6 @@
 
 <script>
     const REF_SCALE = 1000;
-    // [EX_URL and EX_JSON removed for brevity, they remain the same]
     const EX_URL = "https://iiif-cloud.princeton.edu/iiif/2/67%2Fb9%2F7c%2F67b97cf5092d4bcd9df273b83ccf6c6f%2Fintermediate_file/full/1000,1626/0/default.jpg";
     const EX_JSON = [{ "region_type": "header", "box_2d": [50, 50, 250, 300], "lines": [ { "line_number": 1, "box_2d": [60, 60, 240, 290], "segments": [ { "text": "The Bluest Eye", "type": "base", "box_2d": [60, 60, 240, 290], "style": "none" } ] } ] }];
 
@@ -139,14 +137,10 @@
         }
     }
 
-    // --- NEW: Safe Param Parsing ---
     function getParam(key) {
-        // 1. Check Query String (?)
         const searchParams = new URLSearchParams(window.location.search);
         if(searchParams.has(key)) return searchParams.get(key);
 
-        // 2. Check Hash String (#)
-        // Remove the leading '#' if present
         const hashStr = window.location.hash.substring(1); 
         const hashParams = new URLSearchParams(hashStr);
         if(hashParams.has(key)) return hashParams.get(key);
@@ -154,7 +148,6 @@
         return null;
     }
 
-    // --- Share Logic (Hash Based) ---
     function copyShareLink() {
         const url = document.getElementById('img-url').value.trim();
         const jsonStr = document.getElementById('json-data').value.trim();
@@ -168,11 +161,7 @@
 
         try {
             const base64Data = btoa(unescape(encodeURIComponent(jsonStr)));
-            
-            // Construct URL using HASH (#) to avoid Server 414 URI Too Long errors
             const baseUrl = window.location.protocol + '//' + window.location.host + window.location.pathname;
-            
-            // Note: We put everything in the hash for safety
             const finalUrl = `${baseUrl}#img=${encodeURIComponent(url)}&base64=${base64Data}`;
 
             navigator.clipboard.writeText(finalUrl).then(() => {
@@ -184,7 +173,6 @@
         }
     }
 
-    // --- Build Logic ---
     function buildUI(regions) {
         const overlay = document.getElementById('overlay-layer');
         const textPane = document.getElementById('text-pane');
@@ -208,24 +196,43 @@
                 region.lines.forEach(line => {
                     const lineDiv = document.createElement('div');
                     lineDiv.className = 'line'; lineDiv.dir = 'auto';
+                    
+                    const lineId = `line-${globalCounter++}`;
+                    let lineBox = null;
+                    if(line.box_2d) {
+                        lineBox = createBox(line.box_2d, 'bbox-segment');
+                        lineBox.id = `box-${lineId}`;
+                        overlay.appendChild(lineBox);
+                    }
+
                     if(line.segments) {
                         line.segments.forEach(seg => {
-                            if(!seg.box_2d) return;
-                            const uniqueId = `id-${globalCounter++}`;
-                            const sBox = createBox(seg.box_2d, 'bbox-segment');
-                            sBox.id = `box-${uniqueId}`;
-                            sBox.onmouseenter = () => activate(uniqueId);
-                            sBox.onmouseleave = () => deactivate(uniqueId);
-                            sBox.onclick = (e) => { e.stopPropagation(); const targetSpan = document.getElementById(`span-${uniqueId}`); if(targetSpan) targetSpan.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
-                            overlay.appendChild(sBox);
+                            const uniqueId = seg.box_2d ? `seg-${globalCounter++}` : lineId;
+                            
+                            if(seg.box_2d) {
+                                const sBox = createBox(seg.box_2d, 'bbox-segment');
+                                sBox.id = `box-${uniqueId}`;
+                                sBox.onmouseenter = () => activate(uniqueId);
+                                sBox.onmouseleave = () => deactivate(uniqueId);
+                                sBox.onclick = (e) => { e.stopPropagation(); const targetSpan = document.getElementById(`span-${uniqueId}`); if(targetSpan) targetSpan.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
+                                overlay.appendChild(sBox);
+                            } else if (lineBox) {
+                                lineBox.onmouseenter = () => activate(lineId);
+                                lineBox.onmouseleave = () => deactivate(lineId);
+                                lineBox.onclick = (e) => { e.stopPropagation(); const targetSpan = document.getElementById(`span-${lineId}`); if(targetSpan) targetSpan.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
+                            }
 
                             const sSpan = document.createElement('span');
                             let classes = `seg seg-${seg.type}`;
                             if (seg.style && seg.style !== 'none') classes += ` style-${seg.style}`;
-                            sSpan.className = classes; sSpan.id = `span-${uniqueId}`; sSpan.textContent = seg.text + " "; 
+                            sSpan.className = classes; 
+                            sSpan.id = `span-${uniqueId}`; 
+                            sSpan.textContent = seg.text + " "; 
+                            
                             sSpan.onmouseenter = () => activate(uniqueId);
                             sSpan.onmouseleave = () => deactivate(uniqueId);
                             sSpan.onclick = (e) => { e.stopPropagation(); const targetBox = document.getElementById(`box-${uniqueId}`); if(targetBox) targetBox.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' }); };
+                            
                             lineDiv.appendChild(sSpan);
                         });
                     }
@@ -245,17 +252,19 @@
     }
 
     function activate(uid) {
-        const box = document.getElementById(`box-${uid}`); const span = document.getElementById(`span-${uid}`);
-        if(box) box.classList.add('active'); if(span) span.classList.add('active');
+        const boxes = document.querySelectorAll(`[id="box-${uid}"]`);
+        const spans = document.querySelectorAll(`[id="span-${uid}"]`);
+        boxes.forEach(b => b.classList.add('active'));
+        spans.forEach(s => s.classList.add('active'));
     }
     function deactivate(uid) {
-        const box = document.getElementById(`box-${uid}`); const span = document.getElementById(`span-${uid}`);
-        if(box) box.classList.remove('active'); if(span) span.classList.remove('active');
+        const boxes = document.querySelectorAll(`[id="box-${uid}"]`);
+        const spans = document.querySelectorAll(`[id="span-${uid}"]`);
+        boxes.forEach(b => b.classList.remove('active'));
+        spans.forEach(s => s.classList.remove('active'));
     }
 
-    // --- Auto-Load via URL Parameters (Search OR Hash) ---
     window.addEventListener('DOMContentLoaded', () => {
-        // Use the new helper that checks ?Query first, then #Hash
         const imgUrl = getParam('img');
         const base64Data = getParam('base64');
         const dataUrl = getParam('data') || getParam('gist');
