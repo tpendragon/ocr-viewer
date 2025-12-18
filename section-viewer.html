@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gemini Transcription Viewer</title>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --bg-canvas: #e2e8f0;
+      --color-base: #1e293b;
+      --box-region-border: rgba(37, 99, 235, 0.4);
+      --box-active: rgba(255, 230, 0, 0.3);
+      --box-border-active: #facc15;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background-color: #f1f5f9;
+      overflow: hidden;
+    }
+
+    header {
+      background: white;
+      padding: 0.75rem 1.5rem;
+      border-bottom: 1px solid #cbd5e1;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      height: 50px;
+      flex-shrink: 0;
+      z-index: 20;
+    }
+
+    .md-h3 {
+      font-size: 1.1em;
+      font-weight: bold;
+      color: #475569;
+      margin-top: 0.5em;
+    }
+
+    .md-list-item {
+      padding-left: 1rem;
+      color: #334155;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 1rem;
+      color: #334155;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+    }
+
+    button {
+      padding: 0.4rem 0.8rem;
+      border-radius: 4px;
+      border: 1px solid #cbd5e1;
+      background: white;
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-weight: 600;
+      transition: all 0.1s;
+    }
+
+    button:hover {
+      background: #f8fafc;
+      border-color: #94a3b8;
+    }
+
+    button.primary {
+      background: var(--primary);
+      color: white;
+      border: none;
+    }
+
+    button.primary:hover {
+      background: #1d4ed8;
+    }
+
+    button.secondary {
+      color: #475569;
+      border: 1px dashed #cbd5e1;
+    }
+
+    button.secondary:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+    }
+
+    #setup-view {
+      position: absolute;
+      inset: 0;
+      background: #f8fafc;
+      z-index: 50;
+      padding: 2rem;
+      display: flex;
+      justify-content: center;
+      overflow-y: auto;
+    }
+
+    .setup-card {
+      background: white;
+      padding: 2rem;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      width: 100%;
+      max-width: 900px;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+      height: fit-content;
+    }
+
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      flex: 1;
+    }
+
+    label {
+      font-weight: 600;
+      color: #64748b;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+    }
+
+    input,
+    textarea {
+      padding: 0.75rem;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      font-family: monospace;
+      font-size: 12px;
+    }
+
+    textarea {
+      min-height: 300px;
+      resize: vertical;
+    }
+
+    .image-pane {
+      flex: 2;
+      background: var(--bg-canvas);
+      padding: 2rem;
+      overflow: auto;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+    }
+
+    .canvas-wrapper {
+      position: relative;
+      background: white;
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+      line-height: 0;
+    }
+
+    #target-image {
+      max-width: 100%;
+      display: block;
+    }
+
+    .overlay-layer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .bbox {
+      position: absolute;
+      pointer-events: auto;
+      transition: 0.1s;
+      border: 2px solid var(--box-region-border);
+      background: rgba(37, 99, 235, 0.05);
+    }
+
+    .bbox:hover,
+    .bbox.active {
+      background-color: var(--box-active);
+      border-color: var(--box-border-active);
+      z-index: 100;
+      cursor: pointer;
+    }
+
+    .bbox::after {
+      content: attr(data-label);
+      position: absolute;
+      top: -18px;
+      left: -2px;
+      font-size: 10px;
+      background: var(--primary);
+      color: white;
+      padding: 2px 4px;
+      border-radius: 2px;
+      font-weight: bold;
+      text-transform: uppercase;
+      opacity: 0.8;
+    }
+
+    .text-pane {
+      flex: 1;
+      min-width: 400px;
+      max-width: 600px;
+      background: white;
+      border-left: 1px solid #cbd5e1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      padding: 2rem;
+    }
+
+    .region {
+      margin-bottom: 1.5rem;
+      position: relative;
+      border-left: 3px solid transparent;
+      padding-left: 1rem;
+      transition: all 0.2s;
+    }
+
+    .region:hover,
+    .region.active {
+      border-left-color: var(--primary);
+      background: #f8fafc;
+    }
+
+    .region-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 0.5rem;
+    }
+
+    .region-badge {
+      font-size: 0.65rem;
+      color: white;
+      background: #64748b;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .badge-visual {
+      background: #ec4899;
+    }
+
+    .badge-header {
+      background: #0f172a;
+    }
+
+    .badge-marginalia {
+      background: #8b5cf6;
+    }
+
+    .region-content {
+      font-family: "Georgia", serif;
+      line-height: 1.6;
+      color: #334155;
+      font-size: 1.05rem;
+    }
+
+    /* Markdown Styling */
+    .md-h1 {
+      font-size: 1.4em;
+      font-weight: bold;
+      margin-bottom: 0.5em;
+      color: #1e293b;
+    }
+
+    .md-h2 {
+      font-size: 1.2em;
+      font-weight: bold;
+      margin-bottom: 0.4em;
+      color: #334155;
+    }
+
+    .md-bold {
+      font-weight: bold;
+      color: #0f172a;
+    }
+
+    .md-italic {
+      font-style: italic;
+    }
+
+    .md-visual {
+      font-style: italic;
+      color: #64748b;
+      background: #f1f5f9;
+      padding: 0.5rem;
+      border-radius: 4px;
+      display: block;
+      font-family: sans-serif;
+      font-size: 0.9rem;
+    }
+
+    #error-msg {
+      display: none;
+      background: #fee2e2;
+      color: #991b1b;
+      padding: 1rem;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      margin-bottom: 10px;
+    }
+
+    /* Strikethrough / Deletion */
+    del {
+      text-decoration: line-through;
+      color: #ef4444;
+      /* Red color for deleted text */
+      text-decoration-thickness: 2px;
+      opacity: 0.8;
+    }
+
+    /* Insertion (Superscript) */
+    .md-insertion {
+      color: #2563eb;
+      /* Blue color for insertions */
+      font-weight: bold;
+      font-size: 0.8em;
+      vertical-align: super;
+    }
+
+    /* Headers matching your data */
+    .md-h1 {
+      font-size: 1.4em;
+      font-weight: bold;
+      color: #1e293b;
+      margin-bottom: 0.5em;
+    }
+
+    .md-bold {
+      font-weight: bold;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div id="setup-view">
+    <div class="setup-card">
+      <h2>Data Configuration</h2>
+      <div class="input-group">
+        <label>Image URL</label>
+        <input type="text" id="img-url" placeholder="https://..." />
+      </div>
+      <div class="input-group">
+        <label>JSON Output (Regions -> Content)</label>
+        <textarea id="json-data" spellcheck="false"></textarea>
+      </div>
+      <div id="error-msg"></div>
+      <div style="display:flex; justify-content: space-between; align-items: center;">
+        <div style="display:flex; gap: 10px;">
+          <button class="secondary" onclick="copyShareLink()">🔗 Copy Link (Hash Strategy)</button>
+        </div>
+        <div style="display:flex; gap: 10px;">
+          <button onclick="loadExample()">Load Example Data</button>
+          <button class="primary" onclick="launchViewer()">Render Visualization</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <header>
+    <h1>Gemini Transcription Viewer</h1>
+    <div class="controls">
+      <button onclick="document.getElementById('setup-view').style.display='flex'">Load Data</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="image-pane">
+      <div class="canvas-wrapper" id="canvas-wrapper">
+        <img id="target-image" src="" alt="Manuscript" />
+        <div id="overlay-layer" class="overlay-layer"></div>
+      </div>
+    </div>
+    <div class="text-pane" id="text-pane">
+    </div>
+  </main>
+
+  <script>
+    const REF_SCALE = 1000;
+    const EX_URL = "https://iiif-cloud.princeton.edu/iiif/2/67%2Fb9%2F7c%2F67b97cf5092d4bcd9df273b83ccf6c6f%2Fintermediate_file/full/1000,1626/0/default.jpg";
+    const EX_JSON = [
+      {
+        "region_type": "header",
+        "markdown_content": "# The Bluest Eye",
+        "box_2d": [50, 50, 250, 300]
+      },
+      {
+        "region_type": "paragraph",
+        "markdown_content": "On the southeast corner of Broadway and 31st Street there stands a pizza parlour where **slow-footed teenagers** group to smoke cigarettes.",
+        "box_2d": [260, 50, 400, 900]
+      }
+    ];
+
+    function loadExample() {
+      document.getElementById('img-url').value = EX_URL;
+      document.getElementById('json-data').value = JSON.stringify(EX_JSON, null, 2);
+    }
+
+    function launchViewer() {
+      const url = document.getElementById('img-url').value.trim();
+      const jsonStr = document.getElementById('json-data').value.trim();
+      const errMsg = document.getElementById('error-msg');
+
+      errMsg.style.display = 'none';
+
+      try {
+        if (!url || !jsonStr) throw new Error("Missing URL or JSON data");
+        const data = JSON.parse(jsonStr);
+        if (!Array.isArray(data)) throw new Error("JSON root must be an Array of Regions");
+
+        document.getElementById('setup-view').style.display = 'none';
+        const img = document.getElementById('target-image');
+        img.src = url;
+
+        buildUI(data);
+
+      } catch (e) {
+        errMsg.textContent = e.message;
+        errMsg.style.display = 'block';
+      }
+    }
+
+    function getParam(key) {
+      const searchParams = new URLSearchParams(window.location.search);
+      if (searchParams.has(key)) return searchParams.get(key);
+
+      const hashStr = window.location.hash.substring(1);
+      const hashParams = new URLSearchParams(hashStr);
+      if (hashParams.has(key)) return hashParams.get(key);
+
+      return null;
+    }
+
+    function copyShareLink() {
+      const url = document.getElementById('img-url').value.trim();
+      const jsonStr = document.getElementById('json-data').value.trim();
+      const errMsg = document.getElementById('error-msg');
+
+      if (!url || !jsonStr) {
+        errMsg.textContent = "Cannot share: Missing URL or JSON data";
+        errMsg.style.display = 'block';
+        return;
+      }
+
+      try {
+        // 1. Handle Unicode (Emojis/Special Chars) safely
+        // This pattern (encodeURIComponent -> unescape) allows btoa to handle Unicode
+        const base64Raw = btoa(unescape(encodeURIComponent(jsonStr)));
+
+        // 2. URL Encode the Base64 string
+        // THIS WAS MISSING: It protects '+', '/', and '=' from being corrupted in the URL
+        const base64Safe = encodeURIComponent(base64Raw);
+
+        const baseUrl = window.location.href.split('#')[0];
+        const finalUrl = `${baseUrl}#img=${encodeURIComponent(url)}&base64=${base64Safe}`;
+
+        navigator.clipboard.writeText(finalUrl).then(() => {
+          alert("Shareable URL copied to clipboard!");
+        });
+      } catch (e) {
+        errMsg.textContent = "Error creating share link: " + e.message;
+        errMsg.style.display = 'block';
+      }
+    }
+
+    function parseMarkdown(text) {
+      if (!text) return "";
+
+      // 1. Normalize Newlines
+      // Convert literal "\n" strings (common in JSON) to actual newline characters.
+      // This ensures the Header regex (^) works correctly on line starts.
+      let html = text.replace(/\\n/g, '\n');
+
+      // 2. Escape HTML (Safety)
+      html = html.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+      // 3. Block Level Elements (Headers)
+      // Now that we have real newlines, the 'm' flag allows ^ to match line starts.
+      html = html.replace(/^# (.*$)/gm, '<div class="md-h1">$1</div>');
+      html = html.replace(/^## (.*$)/gm, '<div class="md-h2">$1</div>');
+
+      // 4. Strikethrough (~~text~~)
+      // Using [\s\S] ensures we can cross out text even if it spans multiple lines.
+      html = html.replace(/~~([\s\S]*?)~~/g, '<del>$1</del>');
+
+      // 5. Bold & Italic
+      html = html.replace(/\*\*(.*?)\*\*/g, '<span class="md-bold">$1</span>');
+      html = html.replace(/\*(.*?)\*/g, '<span class="md-italic">$1</span>');
+
+      // 6. Insertions (^text)
+      html = html.replace(/\^([a-zA-Z0-9]+)/g, '<sup class="md-insertion">$1</sup>');
+      html = html.replace(/\^ /g, '<sup class="md-caret">^</sup>');
+
+      // 7. Final Output: Convert Real Newlines to <br>
+      // We catch both \r\n and \n just to be safe.
+      html = html.replace(/(?:\r\n|\r|\n)/g, '<br />');
+
+      return html;
+    }
+
+    // Global counter to ensure unique IDs across recursive calls
+    let globalRegionCounter = 0;
+
+    function buildUI(regions, container = document.getElementById('text-pane')) {
+      // 1. Reset Logic
+      if (container.id === 'text-pane') {
+        container.innerHTML = '';
+        document.getElementById('overlay-layer').innerHTML = '';
+        globalRegionCounter = 0;
+      }
+
+      regions.forEach((region) => {
+        const uid = `region-${globalRegionCounter++}`;
+
+        // --- A. Bounding Box Logic (Same as before) ---
+        if (region.box_2d) {
+          const overlay = document.getElementById('overlay-layer');
+          const rBox = createBox(region.box_2d, 'bbox');
+          rBox.id = `box-${uid}`;
+          rBox.setAttribute('data-label', region.label || region.region_type);
+          rBox.onmouseenter = () => activate(uid);
+          rBox.onmouseleave = () => deactivate(uid);
+          rBox.onclick = (e) => {
+            e.stopPropagation();
+            const targetEl = document.getElementById(`text-${uid}`);
+            if (targetEl) targetEl.scrollIntoView({behavior: 'smooth', block: 'center'});
+          };
+          overlay.appendChild(rBox);
+        }
+
+        // --- B. Text Pane Logic ---
+        const regionDiv = document.createElement('div');
+        regionDiv.className = `region region-${region.region_type}`;
+        regionDiv.id = `text-${uid}`;
+
+        // 1. Render Badge/Meta
+        const metaDiv = document.createElement('div');
+        metaDiv.className = 'region-meta';
+
+        const badge = document.createElement('span');
+        let badgeClass = 'region-badge';
+        if (region.region_type === 'visual_content') badgeClass += ' badge-visual';
+        if (region.region_type === 'header') badgeClass += ' badge-header';
+        if (region.region_type === 'marginalia') badgeClass += ' badge-marginalia';
+
+        badge.className = badgeClass;
+        badge.textContent = region.region_type + (region.classification ? `: ${region.classification}` : '');
+        metaDiv.appendChild(badge);
+
+        if (region.label) {
+          const labelSpan = document.createElement('span');
+          labelSpan.style.fontSize = '0.7rem';
+          labelSpan.style.color = '#94a3b8';
+          labelSpan.style.marginLeft = '8px';
+          labelSpan.textContent = region.label;
+          metaDiv.appendChild(labelSpan);
+        }
+        regionDiv.appendChild(metaDiv);
+
+        // 2. Render Content
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'region-content';
+
+        // CHECK: Does it have nested sub-regions?
+        if (region.sub_regions && region.sub_regions.length > 0) {
+
+          // *** THE FIX IS HERE ***
+          // Only use Flexbox (Side-by-Side) for specific types.
+          // Otherwise, default to Block (Vertical Stack) for things like 'body_text'.
+          const columnTypes = ['signatures', 'columns', 'list_row'];
+          const isColumnLayout = columnTypes.includes(region.region_type);
+
+          if (isColumnLayout) {
+            contentDiv.style.display = 'flex';
+            contentDiv.style.gap = '1rem';
+            contentDiv.style.marginTop = '0.5rem';
+          } else {
+            contentDiv.style.display = 'block'; // Vertical stack
+          }
+
+          // RECURSION
+          buildUI(region.sub_regions, contentDiv);
+
+          // If it IS a column layout, force children to split width evenly
+          if (isColumnLayout) {
+            Array.from(contentDiv.children).forEach(child => {
+              child.style.flex = '1';
+              child.style.minWidth = '0';
+            });
+          }
+
+        } else {
+          // STANDARD: Render Markdown content
+          if (region.region_type === 'visual_content') {
+            contentDiv.innerHTML = `<span class="md-visual">${region.markdown_content}</span>`;
+          } else {
+            contentDiv.innerHTML = parseMarkdown(region.markdown_content);
+          }
+        }
+
+        regionDiv.appendChild(contentDiv);
+
+        // Interaction
+        regionDiv.onmouseenter = (e) => {e.stopPropagation(); activate(uid);};
+        regionDiv.onmouseleave = (e) => {e.stopPropagation(); deactivate(uid);};
+        regionDiv.onclick = (e) => {
+          e.stopPropagation();
+          const targetBox = document.getElementById(`box-${uid}`);
+          if (targetBox) targetBox.scrollIntoView({behavior: 'smooth', block: 'center', inline: 'center'});
+        };
+
+        container.appendChild(regionDiv);
+      });
+    }
+
+    function createBox(coords, className) {
+      const [y1, x1, y2, x2] = coords;
+      const div = document.createElement('div'); div.className = className;
+      div.style.top = `${(y1 / REF_SCALE) * 100}%`; div.style.left = `${(x1 / REF_SCALE) * 100}%`;
+      div.style.height = `${((y2 - y1) / REF_SCALE) * 100}%`; div.style.width = `${((x2 - x1) / REF_SCALE) * 100}%`;
+      return div;
+    }
+
+    function activate(uid) {
+      const box = document.getElementById(`box-${uid}`);
+      const text = document.getElementById(`text-${uid}`);
+      if (box) box.classList.add('active');
+      if (text) text.classList.add('active');
+    }
+    function deactivate(uid) {
+      const box = document.getElementById(`box-${uid}`);
+      const text = document.getElementById(`text-${uid}`);
+      if (box) box.classList.remove('active');
+      if (text) text.classList.remove('active');
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      const imgUrl = getParam('img');
+      const base64Data = getParam('base64');
+      const dataUrl = getParam('data') || getParam('gist');
+
+      if (imgUrl) {
+        document.getElementById('img-url').value = imgUrl;
+
+        if (base64Data) {
+          try {
+            const jsonStr = decodeURIComponent(escape(atob(base64Data)));
+            document.getElementById('json-data').value = jsonStr;
+            launchViewer();
+          } catch (e) {
+            console.error("Base64 decode error", e);
+            const errDiv = document.getElementById('error-msg');
+            errDiv.textContent = "Error decoding Base64 data: " + e.message;
+            errDiv.style.display = 'block';
+          }
+        }
+        else if (dataUrl) {
+          fetch(dataUrl)
+            .then(r => r.ok ? r.text() : Promise.reject(r.statusText))
+            .then(text => {
+              document.getElementById('json-data').value = text;
+              launchViewer();
+            })
+            .catch(err => {
+              const errDiv = document.getElementById('error-msg');
+              errDiv.textContent = "Error loading URL parameters: " + err;
+              errDiv.style.display = 'block';
+            });
+        }
+      }
+    });
+
+  </script>
+</body>
+
+</html>
